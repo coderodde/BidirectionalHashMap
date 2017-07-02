@@ -1,6 +1,7 @@
 package net.coderodde.util;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -475,7 +476,18 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
     @Override
     public void clear() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        PrimaryCollisionTreeNode<K1, K2> node = iterationListHead;
+        
+        for (; node != null; node = node.down) {
+            int primaryCollisionTreeBucketIndex = node.keyPair.primaryKeyHash
+                                                & moduloMask;
+            
+            int secondaryCollisionTreeBucketIndex = 
+                    node.keyPair.secondaryKeyHash & moduloMask;
+            
+            primaryHashTable[primaryCollisionTreeBucketIndex] = null;
+            secondaryHashTable[secondaryCollisionTreeBucketIndex] = null;
+        }
     }
 
     @Override
@@ -490,7 +502,161 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     
     @Override
     public Set<Entry<K1, K2>> entrySet() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return new EntrySet();
+    }
+    
+    private class EntrySet implements Set<Entry<K1, K2>> {
+
+        @Override
+        public int size() {
+            return size;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return size == 0;
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            AbstractCollisionTreeNode<K1, K2> node = 
+                    getPrimaryCollisionTreeNode((K1) o);
+            
+            return node != null;
+        }
+
+        @Override
+        public Iterator<Entry<K1, K2>> iterator() {
+            return new KeyPairIterator();
+        }
+        
+        private final class KeyPairIterator implements Iterator<Entry<K1, K2>>{
+
+            private PrimaryCollisionTreeNode<K1, K2> currentNode = 
+                    iterationListHead;
+            
+            @Override
+            public boolean hasNext() {
+                return iterationListHead != null;
+            }
+
+            @Override
+            public Entry<K1, K2> next() {
+                Entry<K1, K2> ret = currentNode.keyPair;
+                currentNode = currentNode.down;
+                return ret;
+            }
+        }
+
+        @Override
+        public Object[] toArray() {
+            KeyPair<K1, K2>[] array = new KeyPair[size];
+            int index = 0;
+            
+            for (Map.Entry<K1, K2> e : this) {
+                array[index++] = (KeyPair<K1, K2>) e;
+            }
+            
+            return array;
+        }
+
+        @Override
+        public <T> T[] toArray(T[] a) {
+            if (a.length < size) {
+                T[] array = (T[]) new Object[size];
+                int index = 0;
+                
+                for (Map.Entry<K1, K2> e : this) {
+                    array[index++] = (T) e;
+                }
+                
+                return array;
+            }
+            
+            int index = 0;
+            
+            for (Map.Entry<K1, K2> e : this) {
+                a[index++] = (T) e;
+            }
+            
+            for (; index < a.length; ++index) {
+                a[index] = null;
+            }
+            
+            return a;
+        }
+
+        @Override
+        public boolean add(Entry<K1, K2> e) {
+            Object o = put(e.getKey(), e.getValue());
+            return o != e.getValue();
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            return BidirectionalHashMap
+                    .this.remove(((KeyPair<K1, K2>) o).primaryKey) != null;
+        }
+
+        @Override
+        public boolean containsAll(Collection<?> c) {
+            for (Object o : c) {
+                if (!contains(o)) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        @Override
+        public boolean addAll(Collection<? extends Entry<K1, K2>> c) {
+            boolean changed = false;
+            
+            for (Entry<K1, K2> e : c) {
+                if (add(e)) {
+                    changed = true;
+                }
+            }
+            
+            return changed;
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            boolean changed = false;
+            
+            for (Object o : c) {
+                if (!contains(o)) {
+                    if (remove(o)) {
+                        changed = true;
+                    }
+                }
+            }
+            
+            return changed;
+        }
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            boolean changed = false;
+            
+            for (Object o : c) {
+                KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
+                
+                if (remove(keyPair)) {
+                    changed = true;
+                }
+            }
+            
+            return changed;
+        }
+
+        @Override
+        public void clear() {
+            BidirectionalHashMap.this.clear();
+        }
+        
     }
     
     /**
