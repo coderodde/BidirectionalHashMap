@@ -48,6 +48,13 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                                         K2 extends Comparable<? super K2>>
         implements Map<K1, K2> {
 
+    @Override
+    public void putAll(Map<? extends K1, ? extends K2> m) {
+        for (Map.Entry<? extends K1, ? extends K2> e : m.entrySet()) {
+            put(e.getKey(), e.getValue());
+        }
+    }
+
     /**
      * The class for holding primary and secondary keys and their respective
      * hash values.
@@ -462,16 +469,27 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         K2 oldValue = node.keyPair.secondaryKey;
         int hashCode = node.keyPair.primaryKeyHash;
         int primaryCollisionTreeBucketIndex = hashCode & moduloMask;
+        AbstractCollisionTreeNode<K1, K2> oppositeNode = 
+                getSecondaryTreeNodeViaPrimaryTreeNode(
+                        (PrimaryCollisionTreeNode<K1, K2>) node);
+        
+        int oppositeNodeHashCode = oppositeNode.keyPair.secondaryKeyHash;
+        int secondaryCollisionTreeBucketIndex = oppositeNodeHashCode 
+                                              & moduloMask;
+        
         unlinkCollisionTreeNode(node,
                                 primaryHashTable, 
                                 primaryCollisionTreeBucketIndex);
+        
+        unlinkCollisionTreeNode(oppositeNode,
+                                secondaryHashTable,
+                                secondaryCollisionTreeBucketIndex);
+        
+        unlinkPrimaryCollisionTreeNodeFromIterationChain(
+                (PrimaryCollisionTreeNode<K1, K2>) node);
+        
         --size;
         return oldValue;
-    }
-
-    @Override
-    public void putAll(Map<? extends K1, ? extends K2> m) {
-        
     }
 
     @Override
@@ -488,6 +506,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             primaryHashTable[primaryCollisionTreeBucketIndex] = null;
             secondaryHashTable[secondaryCollisionTreeBucketIndex] = null;
         }
+        
+        size = 0;
     }
 
     @Override
@@ -656,7 +676,6 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         public void clear() {
             BidirectionalHashMap.this.clear();
         }
-        
     }
     
     /**
@@ -884,6 +903,9 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         SecondaryCollisionTreeNode<K1, K2> secondaryCollisionTreeNode = 
                 new SecondaryCollisionTreeNode<>();
         
+        primaryCollisionTreeNode.keyPair = keyPair;
+        secondaryCollisionTreeNode.keyPair = keyPair;
+        
         int primaryCollisionTreeBucketIndex = 
                 keyPair.primaryKeyHash & moduloMask;
         
@@ -912,6 +934,25 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             iterationListTail.down = node;
             node.up = iterationListTail;
             iterationListTail = node;
+        }
+    }
+    
+    private void unlinkPrimaryCollisionTreeNodeFromIterationChain(
+            PrimaryCollisionTreeNode<K1, K2> node) {
+        if (node.up != null) {
+            node.up.down = node.down;
+        } else {
+            iterationListHead = node.down;
+        }
+        
+        if (node.down != null) {
+            node.down.up = node.up;
+        } else {
+            iterationListTail = iterationListTail.up;
+            
+            if (iterationListTail != null) {
+                iterationListTail.down = null;
+            }
         }
     }
     
