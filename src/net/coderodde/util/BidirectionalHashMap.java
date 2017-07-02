@@ -5,6 +5,44 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * This class implements a bidirectional, bijective hash map. It asks two key 
+ * types: a primary key type and a secondary key type. Both must be 
+ * {@code Comparable}. It allows creating mappings, which are just primary/
+ * secondary -key pairs, and later accessing secondary keys via primary keys,
+ * and vice versa.
+ * <p>
+ * Suppose we have a mapping {@code (1, A)}. If we access it via primary key,
+ * {@code A} will be returned. If we access it via secondary key, {@code 1} will
+ * be returned. When asking to put, say, {@code (1, B)} via primary key, the 
+ * aforementioned mapping will become {@code (1, B)}. Conversely, you can update
+ * {@code (1, A)} via secondary key: you can put {@code (2, A)} via secondary 
+ * key which will update the given mapping to {@code (2, A)}.
+ * <p>
+ * As a slight optimization, of each mapping, both primary and secondary key 
+ * hashes are cached which might give a slight performance advantage when
+ * dealing, say, with strings or other containers.
+ * <p>
+ * Also, unlike most hash tables that maintain collision chains in order to
+ * store hash ties, this implementation implements the collision chains as 
+ * AVL-trees, which guarantees that no (not resizing) operation runs in time
+ * worse than {@code O(log n)}.
+ * <p>
+ * If a user needs to optimize the memory usage of this hash map, a method 
+ * {@code compact()} is provided which effectively will try to compact the 
+ * underlying hash tables to a smallest size (power of two) that does not exceed
+ * the given maximum load factor.
+ * <p>
+ * Since this hash map may become sparse (by first adding many mappings and then
+ * removing most of them) the primary mappings maintain a doubly-linked list
+ * which provides faster iteration and faster moving of all the mappings to a 
+ * new hash tables when expanding or compacting the map.
+ * 
+ * @author Rodion "rodde" Efremov 
+ * @version 1.6 (Jul 2, 2017)
+ * @param <K1> the type of the primary keys.
+ * @param <K2> the type of the secondary keys.
+ */
 public final class BidirectionalHashMap<K1 extends Comparable<? super K1>, 
                                         K2 extends Comparable<? super K2>>
         implements Map<K1, K2> {
