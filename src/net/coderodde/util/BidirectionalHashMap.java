@@ -1038,7 +1038,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         AbstractCollisionTreeNode<K1, K2> parent = successor.parent;
         AbstractCollisionTreeNode<K1, K2> child = successor.rightChild;
         
-        parent.leftChild = child;
+        if (parent.leftChild == successor) {
+            parent.leftChild = child;
+        } else {
+            parent.rightChild = child;
+        }
         
         if (child != null) {
             child.parent = parent;
