@@ -454,6 +454,36 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     public Set<Entry<K1, K2>> entrySet() {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
+    
+    /**
+     * Makes the internal hash tables as small as possible without exceeding the
+     * maximum load factor. If actual condensing is possible, the resulting new
+     * hash tables will be of length of a power of two.
+     */
+    public void compact() {
+        int newCapacity = MINIMUM_INITIAL_CAPACITY;
+        
+        while (size * maximumLoadFactor > newCapacity) {
+            newCapacity <<= 1;
+        }
+        
+        if (newCapacity == primaryHashTable.length) {
+            // No compacting is possible.
+            return;
+        }
+        
+        
+        PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable = 
+                new PrimaryCollisionTreeNode[newCapacity];
+        
+        SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable =
+                new SecondaryCollisionTreeNode[newCapacity];
+        
+        relink(newPrimaryHashTable, newSecondaryHashTable);
+        this.moduloMask = newCapacity - 1;
+        this.primaryHashTable = newPrimaryHashTable;
+        this.secondaryHashTable = newSecondaryHashTable;
+    }
 
     private static int roundToPowerOfTwo(int number) {
         int ret = 1;
@@ -639,8 +669,9 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
     }
     
-    
     private void addNewMapping(K1 primaryKey, K2 secondaryKey) {
+        expandHashTablesIfNeeded();
+        
         KeyPair<K1, K2> keyPair = new KeyPair<>(primaryKey, secondaryKey);
         
         PrimaryCollisionTreeNode<K1, K2> primaryCollisionTreeNode = 
@@ -810,6 +841,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         } else {
             parentOfCurrentNode.rightChild = node;
         }
+        
+        fixCollisionTreeAfterInsertion(parentOfCurrentNode, 
+                                       hashTable,
+                                       bucketIndex);
     }
         
     private static <K1 extends Comparable<? super K1>, 
@@ -851,6 +886,112 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         } else {
             parentOfCurrentNode.rightChild = node;
         }
+        
+        fixCollisionTreeAfterInsertion(node, 
+                                       hashTable, 
+                                       bucketIndex);
     }
     
+    private void relink(
+                PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable,
+                SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable) {
+        PrimaryCollisionTreeNode<K1, K2> finger = iterationListHead;
+        PrimaryCollisionTreeNode<K1, K2> fingerNext;
+        
+        // We expect 'newPrimaryHashTable.length' to be a power of two!!!
+        int newModuloMask = newPrimaryHashTable.length - 1;
+        
+        while (finger != null) {
+            fingerNext = finger.down;
+            int primaryKeyHash = finger.keyPair.primaryKeyHash;
+            int secondaryKeyHash = finger.keyPair.secondaryKeyHash;
+            int primaryCollisionTreeBucketIndex = primaryKeyHash & moduloMask;
+            int secondaryCollisionTreeBucketIndex = secondaryKeyHash 
+                                                  & moduloMask;
+            
+            // Unlink the pair of collision tree nodes from their collision
+            // trees in current hash tables:
+            unlinkCollisionTreeNode(finger,
+                                    primaryHashTable,
+                                    primaryCollisionTreeBucketIndex);
+            AbstractCollisionTreeNode<K1, K2> oppositeNode = 
+                    getSecondaryTreeNodeViaPrimaryTreeNode(finger);
+            unlinkCollisionTreeNode(oppositeNode,
+                                    secondaryHashTable,
+                                    secondaryCollisionTreeBucketIndex);
+            
+            int newPrimaryCollisionTreeBucketIndex = primaryKeyHash 
+                                                   & newModuloMask;
+            
+            int newSecondaryCollisionTreeBucketIndex = secondaryKeyHash
+                                                     & newModuloMask;
+            
+            // Link the pair of collision tree nodes to the argument tables:
+            linkCollisionTreeNodeToPrimaryTable(
+                    finger, 
+                    newPrimaryHashTable,
+                    newPrimaryCollisionTreeBucketIndex);
+            
+            linkCollisionTreeNodeToSecondaryTable(
+                    oppositeNode,
+                    newSecondaryHashTable,
+                    newSecondaryCollisionTreeBucketIndex);
+            
+            finger = fingerNext;
+        }
+    }
+    
+    private void expandHashTablesIfNeeded() {
+        if (size * maximumLoadFactor <= primaryHashTable.length) {
+            return;
+        }
+        
+        int newCapacity = primaryHashTable.length << 1;
+        
+        PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable = 
+                new PrimaryCollisionTreeNode[newCapacity];
+        
+        SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable =
+                new SecondaryCollisionTreeNode[newCapacity];
+        
+        relink(newPrimaryHashTable, newSecondaryHashTable);
+        this.moduloMask = newCapacity - 1;
+        this.primaryHashTable = newPrimaryHashTable;
+        this.secondaryHashTable = newSecondaryHashTable;
+    }
+    
+    private AbstractCollisionTreeNode<K1, K2> 
+        getSecondaryTreeNodeViaPrimaryTreeNode(
+                PrimaryCollisionTreeNode<K1, K2> primaryCollisionTreeNode) {
+        int secondaryNodeHash = primaryCollisionTreeNode.keyPair
+                                                        .secondaryKeyHash;
+        int secondaryCollisionTreeBucketIndex = secondaryNodeHash & moduloMask;
+        
+        AbstractCollisionTreeNode<K1, K2> secondaryCollisionTreeNode = 
+                secondaryHashTable[secondaryCollisionTreeBucketIndex];
+        
+        K2 targetSecondaryKey = primaryCollisionTreeNode.keyPair.secondaryKey;
+        
+        while (secondaryCollisionTreeNode != null) {
+            if (secondaryCollisionTreeNode.keyPair == 
+                    primaryCollisionTreeNode.keyPair) {
+                return secondaryCollisionTreeNode;
+            }
+            
+            int cmp = targetSecondaryKey
+                    .compareTo(secondaryCollisionTreeNode.keyPair.secondaryKey);
+            
+            if (cmp < 0) {
+                secondaryCollisionTreeNode = 
+                        secondaryCollisionTreeNode.leftChild;
+            } else {
+                secondaryCollisionTreeNode =
+                        secondaryCollisionTreeNode.rightChild;
+            }
+        }
+        
+        throw new IllegalStateException(
+                "Failed to find a secondary node given an existing primary " +
+                "node.");
+    }
 }
