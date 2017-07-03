@@ -1006,6 +1006,13 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         if (parent == null) {
             hashTable[bucketIndex] = child;
+            
+            if (node.leftChild == child) {
+                node.leftChild = null;
+            } else {
+                node.rightChild = null;
+            }
+            
             return;
         }
         
@@ -1015,7 +1022,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             parent.rightChild = child;
         }
         
-        fixCollisionTreeAfterDeletion(parent, hashTable, bucketIndex);
+        fixCollisionTreeAfterDeletion(node, hashTable, bucketIndex);
     }
         
     private void unlinkCollisionTreeNodeWithBothChildren(
@@ -1040,7 +1047,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             child.parent = parent;
         }
         
-        fixCollisionTreeAfterDeletion(parent, hashTable, bucketIndex);
+        fixCollisionTreeAfterDeletion(successor, hashTable, bucketIndex);
     }
         
     private void linkCollisionTreeNodeToPrimaryTable(
@@ -1092,6 +1099,9 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                     int bucketIndex) {
         if (hashTable[bucketIndex] == null) {
             hashTable[bucketIndex] = node;
+            // Remove null
+            node.leftChild = null;
+            node.rightChild = null;
             return;
         }
         
@@ -1145,12 +1155,12 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             // Unlink the pair of collision tree nodes from their collision
             // trees in current hash tables:
+            AbstractCollisionTreeNode<K1, K2> oppositeNode = 
+                    getSecondaryTreeNodeViaPrimaryTreeNode(finger);
+            
             unlinkCollisionTreeNode(finger,
                                     primaryHashTable,
                                     primaryCollisionTreeBucketIndex);
-            
-            AbstractCollisionTreeNode<K1, K2> oppositeNode = 
-                    getSecondaryTreeNodeViaPrimaryTreeNode(finger);
             
             unlinkCollisionTreeNode(oppositeNode,
                                     secondaryHashTable,
@@ -1178,7 +1188,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
     
     private void expandHashTablesIfNeeded() {
-        if (size * maximumLoadFactor <= primaryHashTable.length) {
+        if (size <= maximumLoadFactor * primaryHashTable.length) {
             return;
         }
         
