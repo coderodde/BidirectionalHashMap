@@ -956,9 +956,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
     }
     
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-        void unlinkCollisionTreeNode(
+    private void unlinkCollisionTreeNode(
                 AbstractCollisionTreeNode<K1, K2> node,
                 AbstractCollisionTreeNode<K1, K2>[] hashTable,
                 int bucketIndex) {
@@ -973,9 +971,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-        void unlinkCollisionTreeNodeWithNoChildren(
+    private void unlinkCollisionTreeNodeWithNoChildren(
                 AbstractCollisionTreeNode<K1, K2> node,
                 AbstractCollisionTreeNode<K1, K2>[] hashTable,
                 int bucketIndex) {
@@ -993,9 +989,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         fixCollisionTreeAfterDeletion(node.parent, hashTable, bucketIndex);
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>>
-        void unlinkCollisionTreeNodeWithOneChild(
+    private void unlinkCollisionTreeNodeWithOneChild(
                 AbstractCollisionTreeNode<K1, K2> node,
                 AbstractCollisionTreeNode<K1, K2>[] hashTable,
                 int bucketIndex) {
@@ -1024,9 +1018,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         fixCollisionTreeAfterDeletion(parent, hashTable, bucketIndex);
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>>
-        void unlinkCollisionTreeNodeWithBothChildren(
+    private void unlinkCollisionTreeNodeWithBothChildren(
                 AbstractCollisionTreeNode<K1, K2> node,
                 AbstractCollisionTreeNode<K1, K2>[] hashTable,
                 int bucketIndex) {
@@ -1051,9 +1043,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         fixCollisionTreeAfterDeletion(parent, hashTable, bucketIndex);
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-            void linkCollisionTreeNodeToPrimaryTable(
+    private void linkCollisionTreeNodeToPrimaryTable(
                     AbstractCollisionTreeNode<K1, K2> node,
                     AbstractCollisionTreeNode<K1, K2>[] hashTable,
                     int bucketIndex) {
@@ -1096,9 +1086,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                                        bucketIndex);
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-            void linkCollisionTreeNodeToSecondaryTable(
+    private void linkCollisionTreeNodeToSecondaryTable(
                     AbstractCollisionTreeNode<K1, K2> node,
                     AbstractCollisionTreeNode<K1, K2>[] hashTable,
                     int bucketIndex) {
@@ -1108,8 +1096,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
         
         AbstractCollisionTreeNode<K1, K2> currentNode = hashTable[bucketIndex];
-        AbstractCollisionTreeNode<K1, K2> parentOfCurrentNode = 
-                currentNode.parent;
+        AbstractCollisionTreeNode<K1, K2> parentOfCurrentNode = null;
         
         while (currentNode != null) {
             parentOfCurrentNode = currentNode;
@@ -1145,13 +1132,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable,
                 SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable) {
         PrimaryCollisionTreeNode<K1, K2> finger = iterationListHead;
-        PrimaryCollisionTreeNode<K1, K2> fingerNext;
         
         // We expect 'newPrimaryHashTable.length' to be a power of two!!!
         int newModuloMask = newPrimaryHashTable.length - 1;
         
         while (finger != null) {
-            fingerNext = finger.down;
             int primaryKeyHash = finger.keyPair.primaryKeyHash;
             int secondaryKeyHash = finger.keyPair.secondaryKeyHash;
             int primaryCollisionTreeBucketIndex = primaryKeyHash & moduloMask;
@@ -1163,8 +1148,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             unlinkCollisionTreeNode(finger,
                                     primaryHashTable,
                                     primaryCollisionTreeBucketIndex);
+            
             AbstractCollisionTreeNode<K1, K2> oppositeNode = 
                     getSecondaryTreeNodeViaPrimaryTreeNode(finger);
+            
             unlinkCollisionTreeNode(oppositeNode,
                                     secondaryHashTable,
                                     secondaryCollisionTreeBucketIndex);
@@ -1186,7 +1173,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                     newSecondaryHashTable,
                     newSecondaryCollisionTreeBucketIndex);
             
-            finger = fingerNext;
+            finger = finger.down;
         }
     }
     
