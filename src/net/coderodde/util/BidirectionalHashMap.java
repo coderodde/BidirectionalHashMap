@@ -1,8 +1,10 @@
 package net.coderodde.util;
 
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 
@@ -251,6 +253,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
      */
     private Map<K2, K1> inverseMap;
     
+    /**
+     * Used for keeping track of modification during iteration.
+     */
+    private int modificationCount;
+    
     private class InverseMap implements Map<K2, K1> {
 
         @Override
@@ -449,9 +456,15 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             oldValue = node.keyPair.secondaryKey;
             node.keyPair.secondaryKey = value;
             node.keyPair.secondaryKeyHash = value.hashCode();
+            
+            if (!value.equals(oldValue)) {
+                ++modificationCount;
+            }
+            
             return oldValue;
         } else {
             addNewMapping(key, value);
+            ++modificationCount;
             ++size;
             return null;
         }
@@ -488,6 +501,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         unlinkPrimaryCollisionTreeNodeFromIterationChain(
                 (PrimaryCollisionTreeNode<K1, K2>) node);
         
+        ++modificationCount;
         --size;
         return oldValue;
     }
@@ -507,17 +521,158 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             secondaryHashTable[secondaryCollisionTreeBucketIndex] = null;
         }
         
+        modificationCount += size;
         size = 0;
     }
 
     @Override
     public Set<K1> keySet() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return new KeySet();
+    }
+    
+    private final class KeySet implements Set<K1> {
+
+        
+        @Override
+        public int size() {
+            return size;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return size == 0;
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return contains(o);
+        }
+
+        @Override
+        public Iterator<K1> iterator() {
+            return new KeySetIterator();
+        }
+        
+        private final class KeySetIterator implements Iterator<K1> {
+
+            private int expectedModificationCount = modificationCount;
+            private int cachedSize = size;
+            
+            private PrimaryCollisionTreeNode<K1, K2> currentNode =
+                    iterationListHead;
+            
+            private PrimaryCollisionTreeNode<K1, K2> lastIteratedNode = null;
+            
+            private int iterated = 0;
+            private boolean canRemove = false;
+            
+            @Override
+            public boolean hasNext() {
+                checkModificationCount(expectedModificationCount);
+                return iterated < cachedSize;
+            }
+
+            @Override
+            public K1 next() {
+                checkModificationCount(expectedModificationCount);
+                
+                if (!hasNext()) {
+                    throw new NoSuchElementException(
+                            "There is no next key to iterate!");
+                }
+                
+                lastIteratedNode = currentNode;
+                K1 ret = currentNode.keyPair.primaryKey;
+                currentNode = currentNode.down;
+                canRemove = true;
+                ++iterated;
+                return ret;
+                
+            }
+            
+            @Override
+            public void remove() {
+                checkModificationCount(expectedModificationCount);
+                
+                if (!canRemove) {
+                    if (iterated == 0) {
+                        throw new NoSuchElementException(
+                                "'next()' is not called at least once. " +
+                                "Nothing to remove!");
+                    } else {
+                        throw new NoSuchElementException(
+                                "Cannot remove a key twice!");
+                    }
+                }
+                
+                BidirectionalHashMap
+                        .this.remove(lastIteratedNode.keyPair.primaryKey);
+                canRemove = false;
+                expectedModificationCount = modificationCount;
+            }
+        }
+
+        @Override
+        public Object[] toArray() {
+            Object[] array = new Object[size];
+            // Add beaf!
+            return array;
+        }
+
+        @Override
+        public <T> T[] toArray(T[] a) {
+            if (a.length < size) {
+                T[] newArr = (T[]) new Object[size];
+                
+                return newArr;
+            } else {
+                
+            }
+            
+            return null;
+        }
+
+        @Override
+        public boolean add(K1 e) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public boolean containsAll(Collection<?> c) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public boolean addAll(Collection<? extends K1> c) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+
+        @Override
+        public void clear() {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
+        
     }
 
     @Override
     public Collection<K2> values() {
-        throw new UnsupportedOperationException("values() not implemented.");
+        throw new UnsupportedOperationException(
+                "values() not implemented. Use inverse() instead.");
     }
     
     @Override
@@ -557,7 +712,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             @Override
             public boolean hasNext() {
-                return iterationListHead != null;
+                return currentNode != null;
             }
 
             @Override
@@ -706,6 +861,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         this.moduloMask = newCapacity - 1;
         this.primaryHashTable = newPrimaryHashTable;
         this.secondaryHashTable = newSecondaryHashTable;
+        // Do I need the following?
+        ++modificationCount;
     }
 
     private static int roundToPowerOfTwo(int number) {
@@ -1239,5 +1396,12 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         throw new IllegalStateException(
                 "Failed to find a secondary node given an existing primary " +
                 "node.");
+    }
+        
+    private void checkModificationCount(int expectedModificationCount) {
+        if (modificationCount != expectedModificationCount) {
+            throw new ConcurrentModificationException(
+                    "This BidirectionalHashMap was modified during iteration!");
+        }
     }
 }
