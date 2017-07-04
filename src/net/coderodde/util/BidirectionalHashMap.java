@@ -1,7 +1,6 @@
 package net.coderodde.util;
 
 import java.lang.reflect.Array;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -145,6 +144,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             return primaryKey.equals(other.primaryKey) && 
                     secondaryKey.equals(other.secondaryKey);
+        }
+        
+        @Override
+        public int hashCode() {
+            return primaryKeyHash ^ secondaryKeyHash;
         }
     }
     
@@ -784,6 +788,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
             AbstractCollisionTreeNode<K1, K2> node = 
                     getPrimaryCollisionTreeNode(keyPair.primaryKey);
+            
+            if (node == null) {
+                return false;
+            }
             
             AbstractCollisionTreeNode<K1, K2> oppositeNode =
                     BidirectionalHashMap.this
