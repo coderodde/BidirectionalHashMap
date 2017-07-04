@@ -532,7 +532,6 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     
     private final class KeySet implements Set<K1> {
 
-        
         @Override
         public int size() {
             return size;
@@ -545,7 +544,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean contains(Object o) {
-            return contains(o);
+            return BidirectionalHashMap.this.containsKey((K1) o);
         }
 
         @Override
@@ -568,7 +567,6 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             @Override
             public boolean hasNext() {
-                checkModificationCount(expectedModificationCount);
                 return iterated < cachedSize;
             }
 
@@ -592,19 +590,18 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             @Override
             public void remove() {
-                checkModificationCount(expectedModificationCount);
-                
                 if (!canRemove) {
                     if (iterated == 0) {
-                        throw new NoSuchElementException(
+                        throw new IllegalStateException(
                                 "'next()' is not called at least once. " +
                                 "Nothing to remove!");
                     } else {
-                        throw new NoSuchElementException(
+                        throw new IllegalStateException(
                                 "Cannot remove a key twice!");
                     }
                 }
                 
+                checkModificationCount(expectedModificationCount);
                 BidirectionalHashMap
                         .this.remove(lastIteratedNode.keyPair.primaryKey);
                 canRemove = false;
@@ -615,7 +612,12 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         @Override
         public Object[] toArray() {
             Object[] array = new Object[size];
-            // Add beaf!
+            int index = 0;
+            
+            for (K1 key : this) {
+                array[index++] = key;
+            }
+            
             return array;
         }
 
@@ -623,50 +625,97 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         public <T> T[] toArray(T[] a) {
             if (a.length < size) {
                 T[] newArr = (T[]) new Object[size];
+                int index = 0;
+                
+                for (K1 key : this) {
+                    newArr[index++] = (T) key;
+                }
                 
                 return newArr;
             } else {
+                int index = 0;
                 
+                for (K1 key : this) {
+                    a[index++] = (T) key;
+                }
+                
+                while (index < a.length) {
+                    a[index++] = null;
+                }
+                
+                return a;
             }
-            
-            return null;
         }
 
         @Override
         public boolean add(K1 e) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            throw new UnsupportedOperationException(
+                    "add() is not supported!");
         }
 
         @Override
         public boolean remove(Object o) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            boolean contains = BidirectionalHashMap.this.containsKey(o);
+            
+            if (contains) {
+                BidirectionalHashMap.this.remove(o);
+                return true;
+            } else {
+                return false;
+            }
         }
 
         @Override
         public boolean containsAll(Collection<?> c) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            for (Object o : c) {
+                if (!contains(o)) {
+                    return false;
+                }
+            }
+            
+            return true;
         }
 
         @Override
         public boolean addAll(Collection<? extends K1> c) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            throw new UnsupportedOperationException(
+                    "addAll() is not supported!");
         }
 
         @Override
         public boolean retainAll(Collection<?> c) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            boolean modified = false;
+            Iterator<K1> iterator = iterator();
+            
+            while (iterator.hasNext()) {
+                K1 key = iterator.next();
+                
+                if (!c.contains(key)) {
+                    modified = true;
+                    iterator.remove();
+                }
+            }
+            
+            return modified;
         }
 
         @Override
         public boolean removeAll(Collection<?> c) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            boolean modified = false;
+            
+            for (Object o : c) {
+                if (remove(o)) {
+                    modified = true;
+                }
+            }
+            
+            return modified;
         }
 
         @Override
         public void clear() {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            BidirectionalHashMap.this.clear();
         }
-        
     }
 
     @Override
@@ -707,19 +756,80 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         private final class KeyPairIterator implements Iterator<Entry<K1, K2>>{
 
+            /**
+             * Caches the modification count of the owning BidirectionalHashMap.
+             */
+            private int expectedModificationCount = modificationCount;
+            
+            /**
+             * How many key pairs in total we need to visit. We cache this as
+             * we may remove key pairs via remove() method.
+             */
+            private int cachedSize = size;
+            
+            /**
+             * A pointer to a current node.
+             */
             private PrimaryCollisionTreeNode<K1, K2> currentNode = 
                     iterationListHead;
             
+            /**
+             * Holds a node last iterated over with next(). It is set to null
+             * whenever we remove a node via remove() and haven't yet called
+             * next() in order to advance to a node that is removable.
+             */
+            private PrimaryCollisionTreeNode<K1, K2> lastIteratedNode = null;
+            
+            /**
+             * Caches the number of elements iterated via next().
+             */
+            private int iterated = 0;
+            
+            /**
+             * Indicates whether we are pointing to a valid current node that is
+             * possible to remove.
+             */
+            private boolean canRemove = false;
+            
             @Override
             public boolean hasNext() {
-                return currentNode != null;
+                return iterated < cachedSize;
             }
 
             @Override
             public Entry<K1, K2> next() {
-                Entry<K1, K2> ret = currentNode.keyPair;
+                checkModificationCount(expectedModificationCount);
+                
+                if (!hasNext()) {
+                    throw new NoSuchElementException(
+                            "There is no next key pair to iterate!");
+                }
+                
+                lastIteratedNode = currentNode;
+                KeyPair<K1, K2> ret = currentNode.keyPair;
                 currentNode = currentNode.down;
+                canRemove = true;
+                ++iterated;
                 return ret;
+            }
+            
+            public void remove() {
+                if (!canRemove) {
+                    if (iterated == 0) {
+                        throw new IllegalStateException(
+                                "'next()' is not called at least once. " +
+                                "Nothing to remove!");
+                    } else {
+                        throw new IllegalStateException(
+                                "Cannot remove a key pair twice!");
+                    }
+                }
+                
+                checkModificationCount(expectedModificationCount);
+                BidirectionalHashMap
+                        .this.remove(lastIteratedNode.keyPair.primaryKey);
+                canRemove = false;
+                expectedModificationCount = modificationCount;
             }
         }
 
