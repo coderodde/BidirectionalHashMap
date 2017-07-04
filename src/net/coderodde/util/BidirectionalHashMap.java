@@ -1,5 +1,7 @@
 package net.coderodde.util;
 
+import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -623,15 +625,17 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public <T> T[] toArray(T[] a) {
+            Objects.requireNonNull(a, "The input array is null.");
+            
             if (a.length < size) {
-                T[] newArr = (T[]) new Object[size];
+                T[] array = (T[]) Array.newInstance(a.getClass().getComponentType(), size);
                 int index = 0;
                 
                 for (K1 key : this) {
-                    newArr[index++] = (T) key;
+                    array[index++] =(T) key;
                 }
                 
-                return newArr;
+                return array;
             } else {
                 int index = 0;
                 
@@ -639,8 +643,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                     a[index++] = (T) key;
                 }
                 
-                while (index < a.length) {
-                    a[index++] = null;
+                if (a.length > size) {
+                    a[size] = null;
                 }
                 
                 return a;
