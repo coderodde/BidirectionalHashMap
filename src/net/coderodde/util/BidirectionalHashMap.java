@@ -309,54 +309,189 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean containsKey(Object key) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            AbstractCollisionTreeNode<K1, K2> node = 
+                    getSecondaryCollisionTreeNode((K2) key);
+            
+            return node != null;
         }
 
         @Override
         public boolean containsValue(Object value) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            AbstractCollisionTreeNode<K1, K2> node = 
+                    getPrimaryCollisionTreeNode((K1) value);
+            
+            return node != null;
         }
 
         @Override
         public K1 get(Object key) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            AbstractCollisionTreeNode<K1, K2> node = 
+                    getSecondaryCollisionTreeNode((K2) key);
+            
+            if (node != null) {
+                return node.keyPair.primaryKey;
+            } else {
+                return null;
+            }
         }
 
         @Override
-        public K1 put(K2 key, K1 value) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        public K1 put(K2 secondaryKey, K1 primaryKey) {
+            AbstractCollisionTreeNode<K1, K2> node =
+                    getSecondaryCollisionTreeNode(secondaryKey);
+            
+            K1 oldPrimaryKey;
+            
+            if (node != null) {
+                oldPrimaryKey = node.keyPair.primaryKey;
+                node.keyPair.primaryKey = primaryKey;
+                node.keyPair.primaryKeyHash = primaryKey.hashCode();
+                
+                if (!primaryKey.equals(oldPrimaryKey)) {
+                    ++modificationCount;
+                }
+                
+                return oldPrimaryKey;
+            } else {
+                addNewMapping(primaryKey, secondaryKey);
+                ++modificationCount;
+                ++size;
+                return null;
+            }
         }
 
         @Override
         public K1 remove(Object key) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            AbstractCollisionTreeNode<K1, K2> node = 
+                    getSecondaryCollisionTreeNode((K2) key);
+            
+            if (node == null) {
+                return null;
+            }
+            
+            K1 oldPrimaryKey = node.keyPair.primaryKey;
+            int hashCode = node.keyPair.primaryKeyHash;
+            int secondaryCollisionTreeBucketIndex = hashCode & moduloMask;
+            AbstractCollisionTreeNode<K1, K2> oppositeNode =
+                    getPrimaryTreeNodeViaSecondaryTreeNode(null);
+            
+            int oppositeNodeHashCode = oppositeNode.keyPair.primaryKeyHash;
+            int primaryCollisionTreeBucketIndex = oppositeNodeHashCode 
+                                                & moduloMask;
+            
+            unlinkCollisionTreeNode(node,
+                                    secondaryHashTable,
+                                    secondaryCollisionTreeBucketIndex);
+            
+            unlinkCollisionTreeNode(oppositeNode,
+                                    primaryHashTable,
+                                    primaryCollisionTreeBucketIndex);
+            
+            unlinkPrimaryCollisionTreeNodeFromIterationChain(
+                    (PrimaryCollisionTreeNode<K1, K2>) oppositeNode);
+            
+            ++modificationCount;
+            --size;
+            return oldPrimaryKey;
         }
 
         @Override
         public void putAll(Map<? extends K2, ? extends K1> m) {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            for (Map.Entry<? extends K2, ? extends K1> e: m.entrySet()) {
+                BidirectionalHashMap.this.put(e.getValue(), e.getKey());
+            }
         }
 
         @Override
         public void clear() {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            BidirectionalHashMap.this.clear();
         }
 
         @Override
         public Set<K2> keySet() {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            return new InverseKeySet();
         }
 
         @Override
         public Collection<K1> values() {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            throw new UnsupportedOperationException("Not supported yet.");
         }
 
         @Override
         public Set<Entry<K2, K1>> entrySet() {
-            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            throw new UnsupportedOperationException(
+                    "Not supported yet. Use BidirectionalHashMap.entrySet() " +
+                    "instead.");
         }
         
+        private final class InverseKeySet implements Set<K2> {
+
+            @Override
+            public int size() {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean isEmpty() {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean contains(Object o) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public Iterator<K2> iterator() {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public Object[] toArray() {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public <T> T[] toArray(T[] a) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean add(K2 e) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean remove(Object o) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean containsAll(Collection<?> c) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean addAll(Collection<? extends K2> c) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean retainAll(Collection<?> c) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public boolean removeAll(Collection<?> c) {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+
+            @Override
+            public void clear() {
+                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            }
+            
+        }
     }
     
     public BidirectionalHashMap(int initialCapacity,
@@ -1574,6 +1709,40 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         throw new IllegalStateException(
                 "Failed to find a secondary node given an existing primary " +
+                "node.");
+    }
+        
+    private AbstractCollisionTreeNode<K1, K2>
+    getPrimaryTreeNodeViaSecondaryTreeNode(
+            SecondaryCollisionTreeNode<K1, K2> secondaryCollisionTreeNode) {
+        int primaryNodeHash = secondaryCollisionTreeNode.keyPair.primaryKeyHash;
+        int primaryCollisionTreeBucketIndex = primaryNodeHash & moduloMask;
+        
+        AbstractCollisionTreeNode<K1, K2> primaryCollisionTreeNode =
+                primaryHashTable[primaryCollisionTreeBucketIndex];
+        
+        K1 targetPrimaryKey = secondaryCollisionTreeNode.keyPair.primaryKey;
+        
+        while (primaryCollisionTreeNode != null) {
+            if (primaryCollisionTreeNode.keyPair == 
+                    secondaryCollisionTreeNode.keyPair) {
+                return primaryCollisionTreeNode;
+            }
+            
+            int cmp = targetPrimaryKey
+                    .compareTo(primaryCollisionTreeNode.keyPair.primaryKey);
+            
+            if (cmp < 0) {
+                primaryCollisionTreeNode = 
+                        primaryCollisionTreeNode.leftChild;
+            } else {
+                primaryCollisionTreeNode =
+                        primaryCollisionTreeNode.rightChild;
+            }
+        }
+        
+        throw new IllegalStateException(
+                "Failed to find a primary node given an existing secondary " +
                 "node.");
     }
         
