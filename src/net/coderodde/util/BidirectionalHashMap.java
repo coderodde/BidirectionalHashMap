@@ -126,6 +126,26 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             throw new UnsupportedOperationException(
                     "Changing secondary key is not supported!");
         }
+        
+        @Override
+        public boolean equals(Object o) {
+            if (o == null) {
+                return false;
+            }
+            
+            if (o == this) {
+                return true;
+            }
+            
+            if (!getClass().equals(o.getClass())) {
+                return false;
+            }
+            
+            KeyPair<K1, K2> other = (KeyPair<K1, K2>) o;
+            
+            return primaryKey.equals(other.primaryKey) && 
+                    secondaryKey.equals(other.secondaryKey);
+        }
     }
     
     /**
