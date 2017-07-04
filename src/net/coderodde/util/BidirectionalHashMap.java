@@ -66,35 +66,46 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
      * @param <K1> the type of the primary keys.
      * @param <K2> the type of the secondary keys.
      */
-    private static final class KeyPair<K1, K2> implements Map.Entry<K1, K2> {
+    public static final class KeyPair<K1, K2> implements Map.Entry<K1, K2> {
         
         /**
          * The primary key.
          */
-        K1 primaryKey;
+        private K1 primaryKey;
         
         /**
          * The secondary key.
          */
-        K2 secondaryKey;
+        private K2 secondaryKey;
         
         /**
          * The hash value of the primary key. We cache this in order to have a
          * slight performance advantage when dealing with, say, strings or other
          * containers.
          */
-        int primaryKeyHash;
+        private int primaryKeyHash;
         
         /**
          * The hash value of the secondary key.
          */
-        int secondaryKeyHash;
+        private int secondaryKeyHash;
 
+        /**
+         * Constructs a key pair.
+         * 
+         * @param primaryKey   the primary key;
+         * @param secondaryKey the secondary key.
+         */
         KeyPair(K1 primaryKey, K2 secondaryKey) {
-            this.primaryKey = Objects.requireNonNull(primaryKey, 
-                                      "Null keys are not allowed.");
-            this.secondaryKey = Objects.requireNonNull(secondaryKey,
-                                      "Null keys are not allowed.");
+            this.primaryKey = 
+                    Objects.requireNonNull(
+                        primaryKey,
+                        "This BidirectionalHashMap does not permit null keys.");
+            
+            this.secondaryKey = 
+                    Objects.requireNonNull(
+                        secondaryKey,
+                        "This BidirectionalHashMap does not permit null keys.");
             
             this.primaryKeyHash = primaryKey.hashCode();
             this.secondaryKeyHash = secondaryKey.hashCode();
@@ -628,27 +639,29 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             Objects.requireNonNull(a, "The input array is null.");
             
             if (a.length < size) {
-                T[] array = (T[]) Array.newInstance(a.getClass().getComponentType(), size);
+                T[] array = 
+                        (T[]) Array.newInstance(a.getClass()
+                                                 .getComponentType(), size);
                 int index = 0;
                 
                 for (K1 key : this) {
-                    array[index++] =(T) key;
+                    array[index++] = (T) key;
                 }
                 
                 return array;
-            } else {
-                int index = 0;
-                
-                for (K1 key : this) {
-                    a[index++] = (T) key;
-                }
-                
-                if (a.length > size) {
-                    a[size] = null;
-                }
-                
-                return a;
             }
+            
+            int index = 0;
+
+            for (K1 key : this) {
+                a[index++] = (T) key;
+            }
+
+            if (a.length > size) {
+                a[size] = null;
+            }
+
+            return a;
         }
 
         @Override
@@ -747,10 +760,19 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean contains(Object o) {
+            Objects.requireNonNull(o, "The input map entry is null!");
+            KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
             AbstractCollisionTreeNode<K1, K2> node = 
-                    getPrimaryCollisionTreeNode((K1) o);
+                    getPrimaryCollisionTreeNode(keyPair.primaryKey);
             
-            return node != null;
+            AbstractCollisionTreeNode<K1, K2> oppositeNode =
+                    BidirectionalHashMap.this
+                            .getSecondaryTreeNodeViaPrimaryTreeNode(
+                                    (PrimaryCollisionTreeNode<K1, K2>) node);
+            
+            return node != null 
+                    && oppositeNode.keyPair
+                                   .secondaryKey.equals(keyPair.secondaryKey);
         }
 
         @Override
@@ -839,11 +861,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public Object[] toArray() {
-            KeyPair<K1, K2>[] array = new KeyPair[size];
+            Object[] array = new Object[size];
             int index = 0;
             
             for (Map.Entry<K1, K2> e : this) {
-                array[index++] = (KeyPair<K1, K2>) e;
+                array[index++] = e;
             }
             
             return array;
@@ -851,12 +873,17 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public <T> T[] toArray(T[] a) {
+            Objects.requireNonNull(a, "The input array is null.");
+            
             if (a.length < size) {
-                T[] array = (T[]) new Object[size];
+                T[] array =
+                        (T[]) Array.newInstance(a.getClass()
+                                                 .getComponentType(), size);
+                
                 int index = 0;
                 
-                for (Map.Entry<K1, K2> e : this) {
-                    array[index++] = (T) e;
+                for (Map.Entry<K1, K2> entry : this) {
+                   array[index++] = (T) entry;
                 }
                 
                 return array;
@@ -868,19 +895,27 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 a[index++] = (T) e;
             }
             
-            for (; index < a.length; ++index) {
-                a[index] = null;
+            if (a.length > size) {
+                a[size] = null;
             }
             
             return a;
         }
 
         @Override
-        public boolean add(Entry<K1, K2> e) {
+        public boolean add(Map.Entry<K1, K2> e) {
             Object o = put(e.getKey(), e.getValue());
-            return o != e.getValue();
+            return !Objects.equals(o, e.getValue());
         }
 
+        /**
+         * This method expects a {@link KeyPair} as input. Removes a mapping
+         * from the owner bidirectional map via the primary key of the input
+         * mapping; that is, the secondary key is ignored.
+         * 
+         * @param o the key mapping as an {@code Object}.
+         * @return {@code true} if the underlying map changed due to the call.
+         */
         @Override
         public boolean remove(Object o) {
             return BidirectionalHashMap
@@ -913,32 +948,34 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean retainAll(Collection<?> c) {
-            boolean changed = false;
+            boolean modified = false;
+            Iterator<Map.Entry<K1, K2>> iterator = iterator();
             
-            for (Object o : c) {
-                if (!contains(o)) {
-                    if (remove(o)) {
-                        changed = true;
-                    }
+            while (iterator.hasNext()) {
+                Map.Entry<K1, K2> entry = iterator.next();
+                
+                if (!c.contains(entry)) {
+                    modified = true;
+                    iterator.remove();
                 }
             }
             
-            return changed;
+            return modified;
         }
 
         @Override
         public boolean removeAll(Collection<?> c) {
-            boolean changed = false;
+            boolean modified = false;
             
             for (Object o : c) {
                 KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
                 
                 if (remove(keyPair)) {
-                    changed = true;
+                    modified = true;
                 }
             }
             
-            return changed;
+            return modified;
         }
 
         @Override
