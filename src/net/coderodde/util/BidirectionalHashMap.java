@@ -336,18 +336,37 @@ public final class BidirectionalHashMap<K extends Comparable<? super K>,
             AbstractCollisionTreeNode<K, V> node =
                     getSecondaryCollisionTreeNode(secondaryKey);
             
-            K oldPrimaryKey;
-            
             if (node != null) {
-                oldPrimaryKey = node.keyPair.key;
-                node.keyPair.key = primaryKey;
-                node.keyPair.keyHash = primaryKey.hashCode();
+                K oldKey = node.keyPair.key;
                 
-                if (!primaryKey.equals(oldPrimaryKey)) {
-                    ++modificationCount;
+                if (primaryKey.equals(oldKey)) {
+                    return primaryKey;
                 }
                 
-                return oldPrimaryKey;
+                ++modificationCount;
+                
+                int newKeyHash = primaryKey.hashCode();
+                int currentPrimaryCollisionTreeBucketIndex = 
+                        node.keyPair.keyHash & moduloMask;
+                int newPrimaryCollisionTreeBucketIndex =
+                        newKeyHash & moduloMask;
+                
+                AbstractCollisionTreeNode<K, V> oppositeNode = 
+                        getPrimaryTreeNodeViaSecondaryTreeNode(
+                                (SecondaryCollisionTreeNode<K, V>) node);
+                
+                unlinkCollisionTreeNode(oppositeNode,
+                                        primaryHashTable,
+                                        currentPrimaryCollisionTreeBucketIndex);
+                
+                linkCollisionTreeNodeToPrimaryTable(
+                        oppositeNode,
+                        primaryHashTable,
+                        newPrimaryCollisionTreeBucketIndex);
+                
+                node.keyPair.key = primaryKey;
+                node.keyPair.keyHash = newKeyHash;
+                return oldKey;
             } else {
                 addNewMapping(primaryKey, secondaryKey);
                 ++modificationCount;
@@ -693,17 +712,36 @@ public final class BidirectionalHashMap<K extends Comparable<? super K>,
         AbstractCollisionTreeNode<K, V> node = 
                 getPrimaryCollisionTreeNode(key);
         
-        V oldValue;
-        
         if (node != null) {
-            oldValue = node.keyPair.value;
-            node.keyPair.value = value;
-            node.keyPair.valueHash = value.hashCode();
+            V oldValue = node.keyPair.value;
             
-            if (!value.equals(oldValue)) {
-                ++modificationCount;
+            if (value.equals(oldValue)) {
+                return value;
             }
             
+            ++modificationCount;
+            
+            int newValueHash = value.hashCode();
+            int currentSecondaryCollsionTreeBucketIndex = node.keyPair.valueHash
+                                                        & moduloMask;
+            int newSecondaryCollisionTreeBucketIndex = newValueHash
+                                                     & moduloMask;
+            
+            AbstractCollisionTreeNode<K, V> oppositeNode = 
+                    getSecondaryTreeNodeViaPrimaryTreeNode(
+                            (PrimaryCollisionTreeNode<K, V>) node);
+            
+            unlinkCollisionTreeNode(oppositeNode, 
+                                    secondaryHashTable,
+                                    currentSecondaryCollsionTreeBucketIndex);
+            
+            linkCollisionTreeNodeToSecondaryTable(
+                    oppositeNode,
+                    secondaryHashTable, 
+                    newSecondaryCollisionTreeBucketIndex);
+            
+            node.keyPair.value = value;
+            node.keyPair.valueHash = newValueHash;
             return oldValue;
         } else {
             addNewMapping(key, value);

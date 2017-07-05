@@ -127,6 +127,11 @@ public class BidirectionalHashMapTest {
         assertNull(map.put(2000, "2000"));
         assertEquals("2000", map.put(2000, "2001"));
         assertEquals("2001", map.put(2000, "2002"));
+        
+        map.put(20, "A");
+        assertEquals("A", map.get(20));
+        assertEquals("A", map.put(20, "B"));
+        assertEquals("B", map.remove(20));
     }
     
     @Test
