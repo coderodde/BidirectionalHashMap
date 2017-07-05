@@ -10,22 +10,21 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * This class implements a bidirectional, bijective hash map. It asks two key 
- * types: a primary key type and a secondary key type. Both must be 
- * {@code Comparable}. It allows creating mappings, which are just primary/
- * secondary -key pairs, and later accessing secondary keys via primary keys,
- * and vice versa.
+ * This class implements a bidirectional, bijective hash map. It asks a key type
+ * and a value type. Both must be {@code Comparable}. It allows creating 
+ * mappings, which are just key/value pairs, and it allows accessing values via
+ * keys and keys via values.
  * <p>
- * Suppose we have a mapping {@code (1, A)}. If we access it via primary key,
- * {@code A} will be returned. If we access it via secondary key, {@code 1} will
- * be returned. When asking to put, say, {@code (1, B)} via primary key, the 
+ * Suppose we have a mapping {@code (1, A)}. If we access it via the key,
+ * {@code A} will be returned. If we access it via the value, {@code 1} will
+ * be returned. When asking to put, say, {@code (1, B)} via the key, the 
  * aforementioned mapping will become {@code (1, B)}. Conversely, you can update
- * {@code (1, A)} via secondary key: you can put {@code (2, A)} via secondary 
- * key which will update the given mapping to {@code (2, A)}.
+ * {@code (1, A)} via the value: you can put {@code (2, A)} via it which will 
+ * update the given mapping to {@code (2, A)}.
  * <p>
- * As a slight optimization, of each mapping, both primary and secondary key 
- * hashes are cached which might give a slight performance advantage when
- * dealing, say, with strings or other containers.
+ * As a slight optimization, of each mapping, both the key and the value hashes 
+ * are cached which might give a slight performance advantage when dealing, say,
+ * with strings or other containers.
  * <p>
  * Also, unlike most hash tables that maintain collision chains in order to
  * store hash ties, this implementation implements the collision chains as 
@@ -43,87 +42,81 @@ import java.util.Set;
  * new hash tables when expanding or compacting the map.
  * 
  * @author Rodion "rodde" Efremov 
- * @version 1.6 (Jul 2, 2017)
- * @param <K1> the type of the primary keys.
- * @param <K2> the type of the secondary keys.
+ * @version 1.6-beta (Jul 5, 2017)
+ * @param <K> the type of the key.
+ * @param <V> the type of the value.
  */
-public final class BidirectionalHashMap<K1 extends Comparable<? super K1>, 
-                                        K2 extends Comparable<? super K2>>
-        implements Map<K1, K2> {
-
-    @Override
-    public void putAll(Map<? extends K1, ? extends K2> m) {
-        for (Map.Entry<? extends K1, ? extends K2> e : m.entrySet()) {
-            put(e.getKey(), e.getValue());
-        }
-    }
+public final class BidirectionalHashMap<K extends Comparable<? super K>, 
+                                        V extends Comparable<? super V>>
+        implements Map<K, V> {
 
     /**
-     * The class for holding primary and secondary keys and their respective
-     * hash values.
+     * The class for holding the keys, the values, and their respective hash 
+     * values.
      * 
-     * @param <K1> the type of the primary keys.
-     * @param <K2> the type of the secondary keys.
+     * @param <K> the type of the key.
+     * @param <V> the type of the value.
      */
-    public static final class KeyPair<K1, K2> implements Map.Entry<K1, K2> {
+    public static final class Mapping<K, V> implements Map.Entry<K, V> {
         
         /**
-         * The primary key.
+         * The key.
          */
-        private K1 primaryKey;
+        private K key;
         
         /**
-         * The secondary key.
+         * The value.
          */
-        private K2 secondaryKey;
+        private V value;
         
         /**
-         * The hash value of the primary key. We cache this in order to have a
+         * The hash value of the key. We cache this in order to have a
          * slight performance advantage when dealing with, say, strings or other
          * containers.
          */
-        private int primaryKeyHash;
+        private int keyHash;
         
         /**
-         * The hash value of the secondary key.
+         * The hash of the value.
          */
-        private int secondaryKeyHash;
+        private int valueHash;
 
         /**
          * Constructs a key pair.
          * 
-         * @param primaryKey   the primary key;
-         * @param secondaryKey the secondary key.
+         * @param key   the key;
+         * @param value the value.
          */
-        KeyPair(K1 primaryKey, K2 secondaryKey) {
-            this.primaryKey = 
+        Mapping(K key, V value) {
+            this.key = 
                     Objects.requireNonNull(
-                        primaryKey,
+                        key,
                         "This BidirectionalHashMap does not permit null keys.");
             
-            this.secondaryKey = 
+            this.value = 
                     Objects.requireNonNull(
-                        secondaryKey,
-                        "This BidirectionalHashMap does not permit null keys.");
+                        value,
+                        "This BidirectionalHashMap does not permit null " +
+                        "values.");
             
-            this.primaryKeyHash = primaryKey.hashCode();
-            this.secondaryKeyHash = secondaryKey.hashCode();
+            this.keyHash = key.hashCode();
+            this.valueHash = value.hashCode();
         }
         
         @Override
-        public K1 getKey() {
-            return primaryKey;
+        public K getKey() {
+            return key;
         }
 
         @Override
-        public K2 getValue() {
-            return secondaryKey;
+        public V getValue() {
+            return value;
         }
 
         @Override
-        public K2 setValue(K2 value) {
+        public V setValue(V value) {
             throw new UnsupportedOperationException(
-                    "Changing secondary key is not supported!");
+                    "Changing values is not supported!");
         }
         
         @Override
@@ -140,43 +133,47 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 return false;
             }
             
-            KeyPair<K1, K2> other = (KeyPair<K1, K2>) o;
+            Mapping<K, V> other = (Mapping<K, V>) o;
             
-            return primaryKey.equals(other.primaryKey) && 
-                    secondaryKey.equals(other.secondaryKey);
+            if (keyHash != other.keyHash || valueHash != other.valueHash) {
+                return false;
+            }
+            
+            return key.equals(other.key) && 
+                    value.equals(other.value);
         }
         
         @Override
         public int hashCode() {
-            return primaryKeyHash ^ secondaryKeyHash;
+            return keyHash ^ valueHash;
         }
     }
     
     /**
      * Implements the basics of a collision tree nodes.
      * 
-     * @param <K1> the type of the primary keys.
-     * @param <K2> the type of the secondary keys.
+     * @param <K> the type of the keys.
+     * @param <V> the type of the values.
      */
     private static abstract class AbstractCollisionTreeNode
-            <K1 extends Comparable<? super K1>,
-             K2 extends Comparable<? super K2>> {
+            <K extends Comparable<? super K>,
+             V extends Comparable<? super V>> {
         
         /**
          * The parent node of this collision tree node. Set to {@code null} if
          * this node is a root.
          */
-        AbstractCollisionTreeNode<K1, K2> parent;
+        AbstractCollisionTreeNode<K, V> parent;
         
         /**
          * The left child node of this node.
          */
-        AbstractCollisionTreeNode<K1, K2> leftChild;
+        AbstractCollisionTreeNode<K, V> leftChild;
         
         /**
          * The right child node of this node.
          */
-        AbstractCollisionTreeNode<K1, K2> rightChild;
+        AbstractCollisionTreeNode<K, V> rightChild;
         
         /**
          * The height of this tree node.
@@ -184,46 +181,45 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         int height;
         
         /**
-         * The key pair.
+         * The mapping of this node.
          */
-        KeyPair<K1, K2> keyPair;
+        Mapping<K, V> keyPair;
     }
         
     /**
      * Implements the primary collision tree node which maintains an additional
-     * doubly linked list for faster iteration and remapping when the load
+     * doubly linked list for faster iteration and relinking when the load
      * factor is exceeded.
      * 
-     * @param <K1> the type of the primary keys.
-     * @param <K2> the type of the secondary keys.
+     * @param <K> the type of the keys.
+     * @param <V> the type of the values.
      */
     private static final class 
-            PrimaryCollisionTreeNode<K1 extends Comparable<? super K1>, 
-                                     K2 extends Comparable<? super K2>> 
-            extends AbstractCollisionTreeNode<K1, K2> {
+            PrimaryCollisionTreeNode<K extends Comparable<? super K>, 
+                                     V extends Comparable<? super V>> 
+            extends AbstractCollisionTreeNode<K, V> {
         
         /**
          * The last primary collision tree node that was added before this node.
          */
-        PrimaryCollisionTreeNode<K1, K2> up;
+        PrimaryCollisionTreeNode<K, V> up;
         
         /**
          * The first primary collision tree node that was added after this node.
          */
-        PrimaryCollisionTreeNode<K1, K2> down;
+        PrimaryCollisionTreeNode<K, V> down;
     }
     
     /**
      * Implements a secondary collision tree node.
-     * @param <K1> the type of the primary key.
-     * @param <K2> the type of the secondary key.
+     * 
+     * @param <K> the type of the keys.
+     * @param <V> the type of the values.
      */
     private static final class 
-            SecondaryCollisionTreeNode<K1 extends Comparable<? super K1>, 
-                                       K2 extends Comparable<? super K2>> 
-            extends AbstractCollisionTreeNode<K1, K2> {
-        
-    }
+            SecondaryCollisionTreeNode<K extends Comparable<? super K>, 
+                                       V extends Comparable<? super V>> 
+            extends AbstractCollisionTreeNode<K, V> {}
     
     /**
      * Minimum capacity of the hash tables.
@@ -246,7 +242,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     private static final float DEFAULT_MAXIMUM_LOAD_FACTOR = 1.0f;
     
     /**
-     * The number of primary/secondary key mappings in this map.
+     * The number of mappings in this map.
      */
     private int size;
     
@@ -254,14 +250,14 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
      * The hash table containing primary collision trees. The length of this 
      * array will be always a power of two.
      */
-    private PrimaryCollisionTreeNode<K1, K2>[] primaryHashTable;
+    private PrimaryCollisionTreeNode<K, V>[] primaryHashTable;
     
     /**
      * The hash table containing secondary collision trees. The length of this
      * array will be always equal to the length of {@code primaryHashTable} and
      * thus will be always a power of two.
      */
-    private SecondaryCollisionTreeNode<K1, K2>[] secondaryHashTable;
+    private SecondaryCollisionTreeNode<K, V>[] secondaryHashTable;
     
     /**
      * The maximum load factor.
@@ -278,24 +274,24 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     /**
      * The head node of the iteration list.
      */
-    private PrimaryCollisionTreeNode<K1, K2> iterationListHead;
+    private PrimaryCollisionTreeNode<K, V> iterationListHead;
     
     /**
      * The tail node of the iteration list.
      */
-    private PrimaryCollisionTreeNode<K1, K2> iterationListTail;
+    private PrimaryCollisionTreeNode<K, V> iterationListTail;
     
     /**
-     * The inverse map mapping the keys in opposite order.
+     * The inverse map mapping the keys and values in opposite order.
      */
-    private Map<K2, K1> inverseMap;
+    private Map<V, K> inverseMap;
     
     /**
      * Used for keeping track of modification during iteration.
      */
     private int modificationCount;
     
-    private class InverseMap implements Map<K2, K1> {
+    private class InverseMap implements Map<V, K> {
 
         @Override
         public int size() {
@@ -309,43 +305,43 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean containsKey(Object key) {
-            AbstractCollisionTreeNode<K1, K2> node = 
-                    getSecondaryCollisionTreeNode((K2) key);
+            AbstractCollisionTreeNode<K, V> node = 
+                    getSecondaryCollisionTreeNode((V) key);
             
             return node != null;
         }
 
         @Override
         public boolean containsValue(Object value) {
-            AbstractCollisionTreeNode<K1, K2> node = 
-                    getPrimaryCollisionTreeNode((K1) value);
+            AbstractCollisionTreeNode<K, V> node = 
+                    getPrimaryCollisionTreeNode((K) value);
             
             return node != null;
         }
 
         @Override
-        public K1 get(Object key) {
-            AbstractCollisionTreeNode<K1, K2> node = 
-                    getSecondaryCollisionTreeNode((K2) key);
+        public K get(Object key) {
+            AbstractCollisionTreeNode<K, V> node = 
+                    getSecondaryCollisionTreeNode((V) key);
             
             if (node != null) {
-                return node.keyPair.primaryKey;
+                return node.keyPair.key;
             } else {
                 return null;
             }
         }
 
         @Override
-        public K1 put(K2 secondaryKey, K1 primaryKey) {
-            AbstractCollisionTreeNode<K1, K2> node =
+        public K put(V secondaryKey, K primaryKey) {
+            AbstractCollisionTreeNode<K, V> node =
                     getSecondaryCollisionTreeNode(secondaryKey);
             
-            K1 oldPrimaryKey;
+            K oldPrimaryKey;
             
             if (node != null) {
-                oldPrimaryKey = node.keyPair.primaryKey;
-                node.keyPair.primaryKey = primaryKey;
-                node.keyPair.primaryKeyHash = primaryKey.hashCode();
+                oldPrimaryKey = node.keyPair.key;
+                node.keyPair.key = primaryKey;
+                node.keyPair.keyHash = primaryKey.hashCode();
                 
                 if (!primaryKey.equals(oldPrimaryKey)) {
                     ++modificationCount;
@@ -361,21 +357,22 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public K1 remove(Object key) {
-            AbstractCollisionTreeNode<K1, K2> node = 
-                    getSecondaryCollisionTreeNode((K2) key);
+        public K remove(Object key) {
+            AbstractCollisionTreeNode<K, V> node = 
+                    getSecondaryCollisionTreeNode((V) key);
             
             if (node == null) {
                 return null;
             }
             
-            K1 oldPrimaryKey = node.keyPair.primaryKey;
-            int hashCode = node.keyPair.primaryKeyHash;
+            K oldPrimaryKey = node.keyPair.key;
+            int hashCode = node.keyPair.valueHash;
             int secondaryCollisionTreeBucketIndex = hashCode & moduloMask;
-            AbstractCollisionTreeNode<K1, K2> oppositeNode =
-                    getPrimaryTreeNodeViaSecondaryTreeNode(null);
+            AbstractCollisionTreeNode<K, V> oppositeNode =
+                    getPrimaryTreeNodeViaSecondaryTreeNode(
+                            (SecondaryCollisionTreeNode<K, V>) node);
             
-            int oppositeNodeHashCode = oppositeNode.keyPair.primaryKeyHash;
+            int oppositeNodeHashCode = oppositeNode.keyPair.keyHash;
             int primaryCollisionTreeBucketIndex = oppositeNodeHashCode 
                                                 & moduloMask;
             
@@ -388,7 +385,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                                     primaryCollisionTreeBucketIndex);
             
             unlinkPrimaryCollisionTreeNodeFromIterationChain(
-                    (PrimaryCollisionTreeNode<K1, K2>) oppositeNode);
+                    (PrimaryCollisionTreeNode<K, V>) oppositeNode);
             
             ++modificationCount;
             --size;
@@ -396,8 +393,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public void putAll(Map<? extends K2, ? extends K1> m) {
-            for (Map.Entry<? extends K2, ? extends K1> e: m.entrySet()) {
+        public void putAll(Map<? extends V, ? extends K> m) {
+            for (Map.Entry<? extends V, ? extends K> e: m.entrySet()) {
                 BidirectionalHashMap.this.put(e.getValue(), e.getKey());
             }
         }
@@ -408,77 +405,194 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public Set<K2> keySet() {
+        public Set<V> keySet() {
             return new InverseKeySet();
         }
 
         @Override
-        public Collection<K1> values() {
+        public Collection<K> values() {
             throw new UnsupportedOperationException("Not supported yet.");
         }
 
         @Override
-        public Set<Entry<K2, K1>> entrySet() {
+        public Set<Entry<V, K>> entrySet() {
             throw new UnsupportedOperationException(
                     "Not supported yet. Use BidirectionalHashMap.entrySet() " +
                     "instead.");
         }
         
-        private final class InverseKeySet implements Set<K2> {
+        private final class InverseKeySet implements Set<V> {
 
             @Override
             public int size() {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                return size;
             }
 
             @Override
             public boolean isEmpty() {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                return size == 0;
             }
 
             @Override
             public boolean contains(Object o) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                return BidirectionalHashMap.this.containsValue((V) o);
             }
 
             @Override
-            public Iterator<K2> iterator() {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            public Iterator<V> iterator() {
+                return new InverseKeySetIterator();
+            }
+            
+            private final class InverseKeySetIterator implements Iterator<V> {
+
+                private int expectedModificationCount = modificationCount;
+                private int cachedSize = size;
+                
+                private PrimaryCollisionTreeNode<K, V> currentNode = 
+                        iterationListHead;
+                
+                private PrimaryCollisionTreeNode<K, V> lastIteratedNode = 
+                        null;
+                
+                private int iterated = 0;
+                private boolean canRemove = false;
+                
+                @Override
+                public boolean hasNext() {
+                    return iterated < cachedSize;
+                }
+
+                @Override
+                public V next() {
+                    checkModificationCount(expectedModificationCount);
+                    
+                    if (!hasNext()) {
+                        throw new NoSuchElementException(
+                                "There is no next value to iterate!");
+                    } 
+                    
+                    lastIteratedNode = currentNode;
+                    V ret = currentNode.keyPair.value;
+                    currentNode = currentNode.down;
+                    canRemove = true;
+                    ++iterated;
+                    return ret;
+                }
+                
+                @Override
+                public void remove() {
+                    if (!canRemove) {
+                        if (iterated == 0) {
+                            throw new IllegalStateException(
+                                    "'next()' is not called at least once. " +
+                                    "Nothing to remove!");
+                        } else {
+                            throw new IllegalStateException(
+                                    "Cannot remove a value twice!");
+                        }
+                    }
+                    
+                    checkModificationCount(expectedModificationCount);
+                    BidirectionalHashMap
+                            .this.remove(lastIteratedNode.keyPair.key);
+                    canRemove = false;
+                    expectedModificationCount = modificationCount;
+                }
             }
 
             @Override
             public Object[] toArray() {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                Object[] array = new Object[size];
+                int index = 0;
+                
+                for (V value : this) {
+                    array[index++] = value;
+                }
+                
+                return array;
             }
 
             @Override
             public <T> T[] toArray(T[] a) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                Objects.requireNonNull(a, "The input array is null.");
+                
+                if (a.length < size) {
+                    T[] array =
+                            (T[]) Array.newInstance(a.getClass()
+                                                     .getComponentType(), size);
+                    
+                    int index = 0;
+                    
+                    for (V value : this) {
+                        array[index++] = (T) value;
+                    }
+                    
+                    return array;
+                }
+                
+                int index = 0;
+                
+                for (V value : this) {
+                    a[index++] = (T) value;
+                }
+                
+                if (a.length > size) {
+                    a[size] = null;
+                }
+                
+                return a;
             }
 
             @Override
-            public boolean add(K2 e) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            public boolean add(V e) {
+                throw new UnsupportedOperationException(
+                        "add() is not supported.");
             }
 
             @Override
             public boolean remove(Object o) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                boolean contains = BidirectionalHashMap.this.containsValue(o);
+                
+                if (contains) {
+                     // yeah!
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
             @Override
             public boolean containsAll(Collection<?> c) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                for (Object o : c) {
+                    if (!contains(o)) {
+                        return false;
+                    }
+                }
+                
+                return true;
             }
 
             @Override
-            public boolean addAll(Collection<? extends K2> c) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+            public boolean addAll(Collection<? extends V> c) {
+                throw new UnsupportedOperationException(
+                        "addAll() is not supported!"); 
             }
 
             @Override
             public boolean retainAll(Collection<?> c) {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                boolean modified = false;
+                Iterator<V> iterator = iterator();
+                
+                while (iterator.hasNext()) {
+                    V key = iterator.next();
+                    
+                    if (!c.contains(key)) {
+                        modified = true;
+                        iterator.remove();
+                    }
+                }
+                
+                return modified;
             }
 
             @Override
@@ -488,9 +602,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
             @Override
             public void clear() {
-                throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                BidirectionalHashMap.this.clear();
             }
-            
         }
     }
     
@@ -507,6 +620,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         this.secondaryHashTable = 
                 new SecondaryCollisionTreeNode[initialCapacity];
         this.moduloMask = initialCapacity - 1;
+        this.inverseMap = new InverseMap();
     }
     
     public BidirectionalHashMap(int initialCapacity) {
@@ -529,105 +643,62 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     public int size() {
         return size;
     }
-
+    
+     @Override
+    public void putAll(Map<? extends K, ? extends V> m) {
+        for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
+            put(e.getKey(), e.getValue());
+        }
+    }
+    
     @Override
     public boolean isEmpty() {
         return size == 0;
     }
 
-    public Map<K2, K1> inverse() {
-        if (inverseMap == null) {
-            inverseMap = new InverseMap();
-        }
-        
+    public Map<V, K> inverse() {
         return inverseMap;
     }
     
     @Override
     public boolean containsKey(Object key) {
-        AbstractCollisionTreeNode<K1, K2> collisionTreeNode = 
-                getPrimaryCollisionTreeNode((K1) key);
+        AbstractCollisionTreeNode<K, V> collisionTreeNode = 
+                getPrimaryCollisionTreeNode((K) key);
         
         return collisionTreeNode != null;
-    }
-    
-    private AbstractCollisionTreeNode<K1, K2> 
-        getPrimaryCollisionTreeNode(K1 primaryKey) {
-        int hashCode = primaryKey.hashCode();
-        int primaryCollisionTreeBucketIndex = hashCode & moduloMask;
-        
-        AbstractCollisionTreeNode<K1, K2> node = 
-                primaryHashTable[primaryCollisionTreeBucketIndex];
-        
-        while (node != null) {
-            int cmp = primaryKey.compareTo(node.keyPair.primaryKey);
-            
-            if (cmp < 0) {
-                node = node.leftChild;
-            } else if (cmp > 0) {
-                node = node.rightChild;
-            } else {
-                return node;
-            }
-        }
-        
-        return null;
-    }
-
-    private AbstractCollisionTreeNode<K1, K2>
-            getSecondaryCollisionTreeNode(K2 secondaryKey) {
-        int hashCode = secondaryKey.hashCode();
-        int secondaryCollisionTreeBucketIndex = hashCode & moduloMask;
-        
-        AbstractCollisionTreeNode<K1, K2> node = 
-                secondaryHashTable[secondaryCollisionTreeBucketIndex];
-        
-        while (node != null) {
-            int cmp = secondaryKey.compareTo(node.keyPair.secondaryKey);
-            
-            if (cmp < 0) {
-                node = node.leftChild;
-            } else if (cmp > 0) {
-                node = node.rightChild;
-            } else {
-                return node;
-            }
-        }
-        
-        return null;
     }
         
     @Override
     public boolean containsValue(Object value) {
-        AbstractCollisionTreeNode<K1, K2> node = 
-                getSecondaryCollisionTreeNode((K2) value);
+        AbstractCollisionTreeNode<K, V> node = 
+                getSecondaryCollisionTreeNode((V) value);
         
         return node != null;
     }
 
     @Override
-    public K2 get(Object key) {
-        AbstractCollisionTreeNode<K1, K2> node =
-                getPrimaryCollisionTreeNode((K1) key);
+    public V get(Object key) {
+        AbstractCollisionTreeNode<K, V> node =
+                getPrimaryCollisionTreeNode((K) key);
         
         if (node != null) {
-            return node.keyPair.secondaryKey;
+            return node.keyPair.value;
         } else {
             return null;
         }
     }
 
     @Override
-    public K2 put(K1 key, K2 value) {
-        AbstractCollisionTreeNode<K1, K2> node = 
+    public V put(K key, V value) {
+        AbstractCollisionTreeNode<K, V> node = 
                 getPrimaryCollisionTreeNode(key);
         
-        K2 oldValue;
+        V oldValue;
         
         if (node != null) {
-            oldValue = node.keyPair.secondaryKey;
-            node.keyPair.secondaryKey = value;
-            node.keyPair.secondaryKeyHash = value.hashCode();
+            oldValue = node.keyPair.value;
+            node.keyPair.value = value;
+            node.keyPair.valueHash = value.hashCode();
             
             if (!value.equals(oldValue)) {
                 ++modificationCount;
@@ -643,22 +714,22 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
 
     @Override
-    public K2 remove(Object key) {
-        AbstractCollisionTreeNode<K1, K2> node = 
-                getPrimaryCollisionTreeNode((K1) key);
+    public V remove(Object key) {
+        AbstractCollisionTreeNode<K, V> node = 
+                getPrimaryCollisionTreeNode((K) key);
         
         if (node == null) {
             return null;
         }
         
-        K2 oldValue = node.keyPair.secondaryKey;
-        int hashCode = node.keyPair.primaryKeyHash;
+        V oldValue = node.keyPair.value;
+        int hashCode = node.keyPair.keyHash;
         int primaryCollisionTreeBucketIndex = hashCode & moduloMask;
-        AbstractCollisionTreeNode<K1, K2> oppositeNode = 
+        AbstractCollisionTreeNode<K, V> oppositeNode = 
                 getSecondaryTreeNodeViaPrimaryTreeNode(
-                        (PrimaryCollisionTreeNode<K1, K2>) node);
+                        (PrimaryCollisionTreeNode<K, V>) node);
         
-        int oppositeNodeHashCode = oppositeNode.keyPair.secondaryKeyHash;
+        int oppositeNodeHashCode = oppositeNode.keyPair.valueHash;
         int secondaryCollisionTreeBucketIndex = oppositeNodeHashCode 
                                               & moduloMask;
         
@@ -671,7 +742,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                                 secondaryCollisionTreeBucketIndex);
         
         unlinkPrimaryCollisionTreeNodeFromIterationChain(
-                (PrimaryCollisionTreeNode<K1, K2>) node);
+                (PrimaryCollisionTreeNode<K, V>) node);
         
         ++modificationCount;
         --size;
@@ -680,14 +751,14 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
     @Override
     public void clear() {
-        PrimaryCollisionTreeNode<K1, K2> node = iterationListHead;
+        PrimaryCollisionTreeNode<K, V> node = iterationListHead;
         
         for (; node != null; node = node.down) {
-            int primaryCollisionTreeBucketIndex = node.keyPair.primaryKeyHash
+            int primaryCollisionTreeBucketIndex = node.keyPair.keyHash
                                                 & moduloMask;
             
             int secondaryCollisionTreeBucketIndex = 
-                    node.keyPair.secondaryKeyHash & moduloMask;
+                    node.keyPair.valueHash & moduloMask;
             
             primaryHashTable[primaryCollisionTreeBucketIndex] = null;
             secondaryHashTable[secondaryCollisionTreeBucketIndex] = null;
@@ -698,11 +769,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
 
     @Override
-    public Set<K1> keySet() {
+    public Set<K> keySet() {
         return new KeySet();
     }
     
-    private final class KeySet implements Set<K1> {
+    private final class KeySet implements Set<K> {
 
         @Override
         public int size() {
@@ -716,23 +787,23 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
 
         @Override
         public boolean contains(Object o) {
-            return BidirectionalHashMap.this.containsKey((K1) o);
+            return BidirectionalHashMap.this.containsKey((K) o);
         }
 
         @Override
-        public Iterator<K1> iterator() {
+        public Iterator<K> iterator() {
             return new KeySetIterator();
         }
         
-        private final class KeySetIterator implements Iterator<K1> {
+        private final class KeySetIterator implements Iterator<K> {
 
             private int expectedModificationCount = modificationCount;
             private int cachedSize = size;
             
-            private PrimaryCollisionTreeNode<K1, K2> currentNode =
+            private PrimaryCollisionTreeNode<K, V> currentNode =
                     iterationListHead;
             
-            private PrimaryCollisionTreeNode<K1, K2> lastIteratedNode = null;
+            private PrimaryCollisionTreeNode<K, V> lastIteratedNode = null;
             
             private int iterated = 0;
             private boolean canRemove = false;
@@ -743,7 +814,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             }
 
             @Override
-            public K1 next() {
+            public K next() {
                 checkModificationCount(expectedModificationCount);
                 
                 if (!hasNext()) {
@@ -752,7 +823,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 }
                 
                 lastIteratedNode = currentNode;
-                K1 ret = currentNode.keyPair.primaryKey;
+                K ret = currentNode.keyPair.key;
                 currentNode = currentNode.down;
                 canRemove = true;
                 ++iterated;
@@ -775,7 +846,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 
                 checkModificationCount(expectedModificationCount);
                 BidirectionalHashMap
-                        .this.remove(lastIteratedNode.keyPair.primaryKey);
+                        .this.remove(lastIteratedNode.keyPair.key);
                 canRemove = false;
                 expectedModificationCount = modificationCount;
             }
@@ -786,7 +857,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             Object[] array = new Object[size];
             int index = 0;
             
-            for (K1 key : this) {
+            for (K key : this) {
                 array[index++] = key;
             }
             
@@ -803,7 +874,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                                                  .getComponentType(), size);
                 int index = 0;
                 
-                for (K1 key : this) {
+                for (K key : this) {
                     array[index++] = (T) key;
                 }
                 
@@ -812,7 +883,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             int index = 0;
 
-            for (K1 key : this) {
+            for (K key : this) {
                 a[index++] = (T) key;
             }
 
@@ -824,7 +895,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public boolean add(K1 e) {
+        public boolean add(K e) {
             throw new UnsupportedOperationException(
                     "add() is not supported!");
         }
@@ -853,7 +924,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public boolean addAll(Collection<? extends K1> c) {
+        public boolean addAll(Collection<? extends K> c) {
             throw new UnsupportedOperationException(
                     "addAll() is not supported!");
         }
@@ -861,10 +932,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         @Override
         public boolean retainAll(Collection<?> c) {
             boolean modified = false;
-            Iterator<K1> iterator = iterator();
+            Iterator<K> iterator = iterator();
             
             while (iterator.hasNext()) {
-                K1 key = iterator.next();
+                K key = iterator.next();
                 
                 if (!c.contains(key)) {
                     modified = true;
@@ -895,17 +966,17 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
 
     @Override
-    public Collection<K2> values() {
+    public Collection<V> values() {
         throw new UnsupportedOperationException(
                 "values() not implemented. Use inverse() instead.");
     }
     
     @Override
-    public Set<Entry<K1, K2>> entrySet() {
+    public Set<Entry<K, V>> entrySet() {
         return new EntrySet();
     }
     
-    private class EntrySet implements Set<Entry<K1, K2>> {
+    private class EntrySet implements Set<Entry<K, V>> {
 
         @Override
         public int size() {
@@ -920,30 +991,30 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         @Override
         public boolean contains(Object o) {
             Objects.requireNonNull(o, "The input map entry is null!");
-            KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
-            AbstractCollisionTreeNode<K1, K2> node = 
-                    getPrimaryCollisionTreeNode(keyPair.primaryKey);
+            Mapping<K, V> keyPair = (Mapping<K, V>) o;
+            AbstractCollisionTreeNode<K, V> node = 
+                    getPrimaryCollisionTreeNode(keyPair.key);
             
             if (node == null) {
                 return false;
             }
             
-            AbstractCollisionTreeNode<K1, K2> oppositeNode =
+            AbstractCollisionTreeNode<K, V> oppositeNode =
                     BidirectionalHashMap.this
                             .getSecondaryTreeNodeViaPrimaryTreeNode(
-                                    (PrimaryCollisionTreeNode<K1, K2>) node);
+                                    (PrimaryCollisionTreeNode<K, V>) node);
             
             return node != null 
                     && oppositeNode.keyPair
-                                   .secondaryKey.equals(keyPair.secondaryKey);
+                                   .value.equals(keyPair.value);
         }
 
         @Override
-        public Iterator<Entry<K1, K2>> iterator() {
+        public Iterator<Entry<K, V>> iterator() {
             return new KeyPairIterator();
         }
         
-        private final class KeyPairIterator implements Iterator<Entry<K1, K2>>{
+        private final class KeyPairIterator implements Iterator<Entry<K, V>>{
 
             /**
              * Caches the modification count of the owning BidirectionalHashMap.
@@ -959,7 +1030,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             /**
              * A pointer to a current node.
              */
-            private PrimaryCollisionTreeNode<K1, K2> currentNode = 
+            private PrimaryCollisionTreeNode<K, V> currentNode = 
                     iterationListHead;
             
             /**
@@ -967,7 +1038,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
              * whenever we remove a node via remove() and haven't yet called
              * next() in order to advance to a node that is removable.
              */
-            private PrimaryCollisionTreeNode<K1, K2> lastIteratedNode = null;
+            private PrimaryCollisionTreeNode<K, V> lastIteratedNode = null;
             
             /**
              * Caches the number of elements iterated via next().
@@ -986,7 +1057,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             }
 
             @Override
-            public Entry<K1, K2> next() {
+            public Entry<K, V> next() {
                 checkModificationCount(expectedModificationCount);
                 
                 if (!hasNext()) {
@@ -995,7 +1066,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 }
                 
                 lastIteratedNode = currentNode;
-                KeyPair<K1, K2> ret = currentNode.keyPair;
+                Mapping<K, V> ret = currentNode.keyPair;
                 currentNode = currentNode.down;
                 canRemove = true;
                 ++iterated;
@@ -1016,7 +1087,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 
                 checkModificationCount(expectedModificationCount);
                 BidirectionalHashMap
-                        .this.remove(lastIteratedNode.keyPair.primaryKey);
+                        .this.remove(lastIteratedNode.keyPair.key);
                 canRemove = false;
                 expectedModificationCount = modificationCount;
             }
@@ -1027,7 +1098,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             Object[] array = new Object[size];
             int index = 0;
             
-            for (Map.Entry<K1, K2> e : this) {
+            for (Map.Entry<K, V> e : this) {
                 array[index++] = e;
             }
             
@@ -1045,7 +1116,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 
                 int index = 0;
                 
-                for (Map.Entry<K1, K2> entry : this) {
+                for (Map.Entry<K, V> entry : this) {
                    array[index++] = (T) entry;
                 }
                 
@@ -1054,7 +1125,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             
             int index = 0;
             
-            for (Map.Entry<K1, K2> e : this) {
+            for (Map.Entry<K, V> e : this) {
                 a[index++] = (T) e;
             }
             
@@ -1066,13 +1137,13 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public boolean add(Map.Entry<K1, K2> e) {
+        public boolean add(Map.Entry<K, V> e) {
             Object o = put(e.getKey(), e.getValue());
             return !Objects.equals(o, e.getValue());
         }
 
         /**
-         * This method expects a {@link KeyPair} as input. Removes a mapping
+         * This method expects a {@link Mapping} as input. Removes a mapping
          * from the owner bidirectional map via the primary key of the input
          * mapping; that is, the secondary key is ignored.
          * 
@@ -1082,7 +1153,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         @Override
         public boolean remove(Object o) {
             return BidirectionalHashMap
-                    .this.remove(((KeyPair<K1, K2>) o).primaryKey) != null;
+                    .this.remove(((Mapping<K, V>) o).key) != null;
         }
 
         @Override
@@ -1097,10 +1168,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
 
         @Override
-        public boolean addAll(Collection<? extends Entry<K1, K2>> c) {
+        public boolean addAll(Collection<? extends Entry<K, V>> c) {
             boolean changed = false;
             
-            for (Entry<K1, K2> e : c) {
+            for (Entry<K, V> e : c) {
                 if (add(e)) {
                     changed = true;
                 }
@@ -1112,10 +1183,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         @Override
         public boolean retainAll(Collection<?> c) {
             boolean modified = false;
-            Iterator<Map.Entry<K1, K2>> iterator = iterator();
+            Iterator<Map.Entry<K, V>> iterator = iterator();
             
             while (iterator.hasNext()) {
-                Map.Entry<K1, K2> entry = iterator.next();
+                Map.Entry<K, V> entry = iterator.next();
                 
                 if (!c.contains(entry)) {
                     modified = true;
@@ -1131,7 +1202,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             boolean modified = false;
             
             for (Object o : c) {
-                KeyPair<K1, K2> keyPair = (KeyPair<K1, K2>) o;
+                Mapping<K, V> keyPair = (Mapping<K, V>) o;
                 
                 if (remove(keyPair)) {
                     modified = true;
@@ -1165,10 +1236,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
         
         
-        PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable = 
+        PrimaryCollisionTreeNode<K, V>[] newPrimaryHashTable = 
                 new PrimaryCollisionTreeNode[newCapacity];
         
-        SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable =
+        SecondaryCollisionTreeNode<K, V>[] newSecondaryHashTable =
                 new SecondaryCollisionTreeNode[newCapacity];
         
         relink(newPrimaryHashTable, newSecondaryHashTable);
@@ -1189,17 +1260,16 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         return ret;
     }
     
-    
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-        int getHeight(AbstractCollisionTreeNode<K1, K2> node) {
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>> 
+        int getHeight(AbstractCollisionTreeNode<K, V> node) {
         return node != null ? node.height : -1;
     }
         
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-                AbstractCollisionTreeNode<K1, K2> 
-        getMinimumNode(AbstractCollisionTreeNode<K1, K2> node) {
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>> 
+                AbstractCollisionTreeNode<K, V> 
+        getMinimumNode(AbstractCollisionTreeNode<K, V> node) {
         while (node.leftChild != null) {
             node = node.leftChild;
         }
@@ -1207,11 +1277,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         return node;
     }
         
-    private static <K1 extends Comparable<? super K1>,
-                    K2 extends Comparable<? super K2>> 
-                    AbstractCollisionTreeNode<K1, K2> 
-            leftRotate(AbstractCollisionTreeNode<K1, K2> node1) {
-        AbstractCollisionTreeNode<K1, K2> node2 = node1.rightChild;
+    private static <K extends Comparable<? super K>,
+                    V extends Comparable<? super V>> 
+                    AbstractCollisionTreeNode<K, V> 
+            leftRotate(AbstractCollisionTreeNode<K, V> node1) {
+        AbstractCollisionTreeNode<K, V> node2 = node1.rightChild;
         
         node2.parent = node1.parent;
         node1.parent = node2;
@@ -1229,11 +1299,11 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         return node2;
     }
             
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-                    AbstractCollisionTreeNode<K1, K2> 
-            rightRotate(AbstractCollisionTreeNode<K1, K2> node1) {
-        AbstractCollisionTreeNode<K1, K2> node2 = node1.leftChild;
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>> 
+                    AbstractCollisionTreeNode<K, V> 
+            rightRotate(AbstractCollisionTreeNode<K, V> node1) {
+        AbstractCollisionTreeNode<K, V> node2 = node1.leftChild;
         
         node2.parent = node1.parent;
         node1.parent = node2;
@@ -1251,51 +1321,51 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         return node2;
     }
             
-    private static <K1 extends Comparable<? super K1>,
-                    K2 extends Comparable<? super K2>> 
-                    AbstractCollisionTreeNode<K1, K2>
-            leftRightRotate(AbstractCollisionTreeNode<K1, K2> node1) {
-        AbstractCollisionTreeNode<K1, K2> node2 = node1.leftChild;
+    private static <K extends Comparable<? super K>,
+                    V extends Comparable<? super V>> 
+                    AbstractCollisionTreeNode<K, V>
+            leftRightRotate(AbstractCollisionTreeNode<K, V> node1) {
+        AbstractCollisionTreeNode<K, V> node2 = node1.leftChild;
         node1.leftChild = leftRotate(node2);
         return rightRotate(node1);
     }
             
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>> 
-                    AbstractCollisionTreeNode<K1, K2>
-            rightLeftRotate(AbstractCollisionTreeNode<K1, K2> node1) {
-        AbstractCollisionTreeNode<K1, K2> node2 = node1.rightChild;
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>> 
+                    AbstractCollisionTreeNode<K, V>
+            rightLeftRotate(AbstractCollisionTreeNode<K, V> node1) {
+        AbstractCollisionTreeNode<K, V> node2 = node1.rightChild;
         node1.rightChild = rightRotate(node2);
         return leftRotate(node1);
     }
             
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>>
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>>
             void fixCollisionTreeAfterInsertion(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
         fixCollisionTree(node, hashTable, bucketIndex, true);
     }
             
-    private static <K1 extends Comparable<? super K1>, 
-                    K2 extends Comparable<? super K2>>
+    private static <K extends Comparable<? super K>, 
+                    V extends Comparable<? super V>>
             void fixCollisionTreeAfterDeletion(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
         fixCollisionTree(node, hashTable, bucketIndex, false);
     }
             
-    private static <K1 extends Comparable<? super K1>,
-                    K2 extends Comparable<? super K2>> 
-        void fixCollisionTree(AbstractCollisionTreeNode<K1, K2> node,
-                              AbstractCollisionTreeNode<K1, K2>[] hashTable,
+    private static <K extends Comparable<? super K>,
+                    V extends Comparable<? super V>> 
+        void fixCollisionTree(AbstractCollisionTreeNode<K, V> node,
+                              AbstractCollisionTreeNode<K, V>[] hashTable,
                               int bucketIndex,
                               boolean insertionMode) {
-        AbstractCollisionTreeNode<K1, K2> grandParent;
-        AbstractCollisionTreeNode<K1, K2> parent = node.parent;
-        AbstractCollisionTreeNode<K1, K2> subtree;
+        AbstractCollisionTreeNode<K, V> grandParent;
+        AbstractCollisionTreeNode<K, V> parent = node.parent;
+        AbstractCollisionTreeNode<K, V> subtree;
         
         while (parent != null) {
             if (getHeight(parent.leftChild) ==
@@ -1363,25 +1433,71 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         }
     }
     
-    private void addNewMapping(K1 primaryKey, K2 secondaryKey) {
+    private AbstractCollisionTreeNode<K, V> 
+        getPrimaryCollisionTreeNode(K primaryKey) {
+        int hashCode = primaryKey.hashCode();
+        int primaryCollisionTreeBucketIndex = hashCode & moduloMask;
+        
+        AbstractCollisionTreeNode<K, V> node = 
+                primaryHashTable[primaryCollisionTreeBucketIndex];
+        
+        while (node != null) {
+            int cmp = primaryKey.compareTo(node.keyPair.key);
+            
+            if (cmp < 0) {
+                node = node.leftChild;
+            } else if (cmp > 0) {
+                node = node.rightChild;
+            } else {
+                return node;
+            }
+        }
+        
+        return null;
+    }
+
+    private AbstractCollisionTreeNode<K, V>
+            getSecondaryCollisionTreeNode(V secondaryKey) {
+        int hashCode = secondaryKey.hashCode();
+        int secondaryCollisionTreeBucketIndex = hashCode & moduloMask;
+        
+        AbstractCollisionTreeNode<K, V> node = 
+                secondaryHashTable[secondaryCollisionTreeBucketIndex];
+        
+        while (node != null) {
+            int cmp = secondaryKey.compareTo(node.keyPair.value);
+            
+            if (cmp < 0) {
+                node = node.leftChild;
+            } else if (cmp > 0) {
+                node = node.rightChild;
+            } else {
+                return node;
+            }
+        }
+        
+        return null;
+    }
+    
+    private void addNewMapping(K primaryKey, V secondaryKey) {
         expandHashTablesIfNeeded();
         
-        KeyPair<K1, K2> keyPair = new KeyPair<>(primaryKey, secondaryKey);
+        Mapping<K, V> keyPair = new Mapping<>(primaryKey, secondaryKey);
         
-        PrimaryCollisionTreeNode<K1, K2> primaryCollisionTreeNode = 
+        PrimaryCollisionTreeNode<K, V> primaryCollisionTreeNode = 
                 new PrimaryCollisionTreeNode<>();
         
-        SecondaryCollisionTreeNode<K1, K2> secondaryCollisionTreeNode = 
+        SecondaryCollisionTreeNode<K, V> secondaryCollisionTreeNode = 
                 new SecondaryCollisionTreeNode<>();
         
         primaryCollisionTreeNode.keyPair = keyPair;
         secondaryCollisionTreeNode.keyPair = keyPair;
         
         int primaryCollisionTreeBucketIndex = 
-                keyPair.primaryKeyHash & moduloMask;
+                keyPair.keyHash & moduloMask;
         
         int secondaryCollisionTreeBucketIndex =
-                keyPair.secondaryKeyHash & moduloMask;
+                keyPair.valueHash & moduloMask;
         
         linkCollisionTreeNodeToPrimaryTable(primaryCollisionTreeNode,
                                             primaryHashTable, 
@@ -1397,7 +1513,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
     
     private void linkPrimaryCollisionTreeNodeIntoIterationChain(
-            PrimaryCollisionTreeNode<K1, K2> node) {
+            PrimaryCollisionTreeNode<K, V> node) {
         if (size == 0) {
             iterationListHead = node;
             iterationListTail = node;
@@ -1409,7 +1525,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
     
     private void unlinkPrimaryCollisionTreeNodeFromIterationChain(
-            PrimaryCollisionTreeNode<K1, K2> node) {
+            PrimaryCollisionTreeNode<K, V> node) {
         if (node.up != null) {
             node.up.down = node.down;
         } else {
@@ -1428,8 +1544,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
     
     private void unlinkCollisionTreeNode(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
         if (node.leftChild == null && node.rightChild == null) {
             unlinkCollisionTreeNodeWithNoChildren(node, hashTable, bucketIndex);
@@ -1443,8 +1559,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
         
     private void unlinkCollisionTreeNodeWithNoChildren(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
         if (node.parent == null) {
             hashTable[bucketIndex] = null;
@@ -1461,10 +1577,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
         
     private void unlinkCollisionTreeNodeWithOneChild(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
-        AbstractCollisionTreeNode<K1, K2> child;
+        AbstractCollisionTreeNode<K, V> child;
         
         if (node.leftChild != null) {
             child = node.leftChild;
@@ -1472,7 +1588,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             child = node.rightChild;
         }
         
-        AbstractCollisionTreeNode<K1, K2> parent = node.parent;
+        AbstractCollisionTreeNode<K, V> parent = node.parent;
         child.parent = parent;
         
         if (parent == null) {
@@ -1497,16 +1613,16 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
         
     private void unlinkCollisionTreeNodeWithBothChildren(
-                AbstractCollisionTreeNode<K1, K2> node,
-                AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                AbstractCollisionTreeNode<K, V> node,
+                AbstractCollisionTreeNode<K, V>[] hashTable,
                 int bucketIndex) {
-        AbstractCollisionTreeNode<K1, K2> successor =
+        AbstractCollisionTreeNode<K, V> successor =
                 getMinimumNode(node.rightChild);
         
         node.keyPair = successor.keyPair;
         
-        AbstractCollisionTreeNode<K1, K2> parent = successor.parent;
-        AbstractCollisionTreeNode<K1, K2> child = successor.rightChild;
+        AbstractCollisionTreeNode<K, V> parent = successor.parent;
+        AbstractCollisionTreeNode<K, V> child = successor.rightChild;
         
         if (parent.leftChild == successor) {
             parent.leftChild = child;
@@ -1522,24 +1638,24 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
         
     private void linkCollisionTreeNodeToPrimaryTable(
-                    AbstractCollisionTreeNode<K1, K2> node,
-                    AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                    AbstractCollisionTreeNode<K, V> node,
+                    AbstractCollisionTreeNode<K, V>[] hashTable,
                     int bucketIndex) {
         if (hashTable[bucketIndex] == null) {
             hashTable[bucketIndex] = node;
             return;
         }
         
-        AbstractCollisionTreeNode<K1, K2> currentNode = hashTable[bucketIndex];
-        AbstractCollisionTreeNode<K1, K2> parentOfCurrentNode = 
+        AbstractCollisionTreeNode<K, V> currentNode = hashTable[bucketIndex];
+        AbstractCollisionTreeNode<K, V> parentOfCurrentNode = 
                 currentNode.parent;
         
         while (currentNode != null) {
             parentOfCurrentNode = currentNode;
             
             int cmp =
-                    node.keyPair.primaryKey
-                            .compareTo(currentNode.keyPair.primaryKey);
+                    node.keyPair.key
+                            .compareTo(currentNode.keyPair.key);
             
             if (cmp < 0) {
                 currentNode = currentNode.leftChild;
@@ -1552,8 +1668,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         node.parent = parentOfCurrentNode;
         
-        if (node.keyPair.primaryKey
-                .compareTo(parentOfCurrentNode.keyPair.primaryKey) < 0) {
+        if (node.keyPair.key
+                .compareTo(parentOfCurrentNode.keyPair.key) < 0) {
             parentOfCurrentNode.leftChild = node;
         } else {
             parentOfCurrentNode.rightChild = node;
@@ -1565,8 +1681,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
         
     private void linkCollisionTreeNodeToSecondaryTable(
-                    AbstractCollisionTreeNode<K1, K2> node,
-                    AbstractCollisionTreeNode<K1, K2>[] hashTable,
+                    AbstractCollisionTreeNode<K, V> node,
+                    AbstractCollisionTreeNode<K, V>[] hashTable,
                     int bucketIndex) {
         if (hashTable[bucketIndex] == null) {
             hashTable[bucketIndex] = node;
@@ -1576,15 +1692,15 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             return;
         }
         
-        AbstractCollisionTreeNode<K1, K2> currentNode = hashTable[bucketIndex];
-        AbstractCollisionTreeNode<K1, K2> parentOfCurrentNode = null;
+        AbstractCollisionTreeNode<K, V> currentNode = hashTable[bucketIndex];
+        AbstractCollisionTreeNode<K, V> parentOfCurrentNode = null;
         
         while (currentNode != null) {
             parentOfCurrentNode = currentNode;
             
             int cmp =
-                    node.keyPair.secondaryKey
-                            .compareTo(currentNode.keyPair.secondaryKey);
+                    node.keyPair.value
+                            .compareTo(currentNode.keyPair.value);
             
             if (cmp < 0) {
                 currentNode = currentNode.leftChild;
@@ -1597,8 +1713,8 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         node.parent = parentOfCurrentNode;
         
-        if (node.keyPair.secondaryKey
-                .compareTo(parentOfCurrentNode.keyPair.secondaryKey) < 0) {
+        if (node.keyPair.value
+                .compareTo(parentOfCurrentNode.keyPair.value) < 0) {
             parentOfCurrentNode.leftChild = node;
         } else {
             parentOfCurrentNode.rightChild = node;
@@ -1610,23 +1726,23 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
     }
     
     private void relink(
-                PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable,
-                SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable) {
-        PrimaryCollisionTreeNode<K1, K2> finger = iterationListHead;
+                PrimaryCollisionTreeNode<K, V>[] newPrimaryHashTable,
+                SecondaryCollisionTreeNode<K, V>[] newSecondaryHashTable) {
+        PrimaryCollisionTreeNode<K, V> finger = iterationListHead;
         
         // We expect 'newPrimaryHashTable.length' to be a power of two!!!
         int newModuloMask = newPrimaryHashTable.length - 1;
         
         while (finger != null) {
-            int primaryKeyHash = finger.keyPair.primaryKeyHash;
-            int secondaryKeyHash = finger.keyPair.secondaryKeyHash;
+            int primaryKeyHash = finger.keyPair.keyHash;
+            int secondaryKeyHash = finger.keyPair.valueHash;
             int primaryCollisionTreeBucketIndex = primaryKeyHash & moduloMask;
             int secondaryCollisionTreeBucketIndex = secondaryKeyHash 
                                                   & moduloMask;
             
             // Unlink the pair of collision tree nodes from their collision
             // trees in current hash tables:
-            AbstractCollisionTreeNode<K1, K2> oppositeNode = 
+            AbstractCollisionTreeNode<K, V> oppositeNode = 
                     getSecondaryTreeNodeViaPrimaryTreeNode(finger);
             
             unlinkCollisionTreeNode(finger,
@@ -1665,10 +1781,10 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         
         int newCapacity = primaryHashTable.length << 1;
         
-        PrimaryCollisionTreeNode<K1, K2>[] newPrimaryHashTable = 
+        PrimaryCollisionTreeNode<K, V>[] newPrimaryHashTable = 
                 new PrimaryCollisionTreeNode[newCapacity];
         
-        SecondaryCollisionTreeNode<K1, K2>[] newSecondaryHashTable =
+        SecondaryCollisionTreeNode<K, V>[] newSecondaryHashTable =
                 new SecondaryCollisionTreeNode[newCapacity];
         
         relink(newPrimaryHashTable, newSecondaryHashTable);
@@ -1677,17 +1793,17 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
         this.secondaryHashTable = newSecondaryHashTable;
     }
     
-    private AbstractCollisionTreeNode<K1, K2> 
+    private AbstractCollisionTreeNode<K, V> 
         getSecondaryTreeNodeViaPrimaryTreeNode(
-                PrimaryCollisionTreeNode<K1, K2> primaryCollisionTreeNode) {
+                PrimaryCollisionTreeNode<K, V> primaryCollisionTreeNode) {
         int secondaryNodeHash = primaryCollisionTreeNode.keyPair
-                                                        .secondaryKeyHash;
+                                                        .valueHash;
         int secondaryCollisionTreeBucketIndex = secondaryNodeHash & moduloMask;
         
-        AbstractCollisionTreeNode<K1, K2> secondaryCollisionTreeNode = 
+        AbstractCollisionTreeNode<K, V> secondaryCollisionTreeNode = 
                 secondaryHashTable[secondaryCollisionTreeBucketIndex];
         
-        K2 targetSecondaryKey = primaryCollisionTreeNode.keyPair.secondaryKey;
+        V targetSecondaryKey = primaryCollisionTreeNode.keyPair.value;
         
         while (secondaryCollisionTreeNode != null) {
             if (secondaryCollisionTreeNode.keyPair == 
@@ -1696,7 +1812,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             }
             
             int cmp = targetSecondaryKey
-                    .compareTo(secondaryCollisionTreeNode.keyPair.secondaryKey);
+                    .compareTo(secondaryCollisionTreeNode.keyPair.value);
             
             if (cmp < 0) {
                 secondaryCollisionTreeNode = 
@@ -1712,16 +1828,16 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
                 "node.");
     }
         
-    private AbstractCollisionTreeNode<K1, K2>
+    private AbstractCollisionTreeNode<K, V>
     getPrimaryTreeNodeViaSecondaryTreeNode(
-            SecondaryCollisionTreeNode<K1, K2> secondaryCollisionTreeNode) {
-        int primaryNodeHash = secondaryCollisionTreeNode.keyPair.primaryKeyHash;
+            SecondaryCollisionTreeNode<K, V> secondaryCollisionTreeNode) {
+        int primaryNodeHash = secondaryCollisionTreeNode.keyPair.keyHash;
         int primaryCollisionTreeBucketIndex = primaryNodeHash & moduloMask;
         
-        AbstractCollisionTreeNode<K1, K2> primaryCollisionTreeNode =
+        AbstractCollisionTreeNode<K, V> primaryCollisionTreeNode =
                 primaryHashTable[primaryCollisionTreeBucketIndex];
         
-        K1 targetPrimaryKey = secondaryCollisionTreeNode.keyPair.primaryKey;
+        K targetPrimaryKey = secondaryCollisionTreeNode.keyPair.key;
         
         while (primaryCollisionTreeNode != null) {
             if (primaryCollisionTreeNode.keyPair == 
@@ -1730,7 +1846,7 @@ public final class BidirectionalHashMap<K1 extends Comparable<? super K1>,
             }
             
             int cmp = targetPrimaryKey
-                    .compareTo(primaryCollisionTreeNode.keyPair.primaryKey);
+                    .compareTo(primaryCollisionTreeNode.keyPair.key);
             
             if (cmp < 0) {
                 primaryCollisionTreeNode = 
